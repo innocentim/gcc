@@ -1,9 +1,8 @@
 // { dg-options "-std=gnu++11" }
+// { dg-do compile }
 
 //
-// 2013-08-26  Tim Shen <timshen91@gmail.com>
-//
-// Copyright (C) 2013-2015 Free Software Foundation, Inc.
+// Copyright (C) 2015 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -20,57 +19,19 @@
 // with this library; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
 
-// 28.11.3 regex_search
-// Tests ECMAScript against a std::string target.
+// 28.11.2 regex_match
 
 #include <regex>
-#include <testsuite_hooks.h>
-#include <testsuite_regex.h>
+#include <list>
 
-using namespace __gnu_test;
 using namespace std;
 
+// Test _Comparable_iter.
 void
 test01()
 {
   bool test __attribute__((unused)) = true;
 
-  VERIFY(regex_search_debug("", std::regex("")));
-}
-
-// ECMA262 [15.10.2.3]
-void
-test02()
-{
-  bool test __attribute__((unused)) = true;
-
-  cmatch m;
-  VERIFY(regex_search_debug("abc", m, regex("((a)|(ab))((c)|(bc))")));
-  const char* sols[] =
-  {
-    "abc",
-    "a",
-    "a",
-    nullptr,
-    "bc",
-    nullptr,
-    "bc",
-  };
-
-  int i = 0;
-  for (const auto& it : m)
-    {
-      VERIFY((sols[i] != nullptr) == it.matched);
-      if (it.matched)
-	VERIFY(it.str() == sols[i]);
-      i++;
-    }
-}
-
-int
-main()
-{
-  test01();
-  test02();
-  return 0;
+  list<char> s = {'a', 's', 'd', 'f'};
+  regex_match(s.begin(), s.end(), regex("asdf", regex_constants::extended));
 }

@@ -61,26 +61,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	__it.matched = false;
 
       bool __ret;
-      if ((__re.flags() & regex_constants::__polynomial)
-	  || (__policy == _RegexExecutorPolicy::_S_alternate
-	      && !__re._M_automaton->_M_has_backref))
-	{
-	  _Executor<_BiIter, _Alloc, _TraitsT, false>
-	    __executor(__s, __e, __m, __re, __flags);
-	  if (__match_mode)
-	    __ret = __executor._M_match();
-	  else
-	    __ret = __executor._M_search();
-	}
-      else
-	{
-	  _Executor<_BiIter, _Alloc, _TraitsT, true>
-	    __executor(__s, __e, __m, __re, __flags);
-	  if (__match_mode)
-	    __ret = __executor._M_match();
-	  else
-	    __ret = __executor._M_search();
-	}
+
+      using _Comparable_iter_type = __comparable_iter_helper::type<_BiIter>;
+      auto __search_mode = __match_mode ? _Regex_search_mode::_Exact : _Regex_search_mode::_Prefix;
+      __ret = _Regex_run<_Comparable_iter_type>::template __run<__policy>(_Comparable_iter_type(std::move(__s)), _Comparable_iter_type(std::move(__e)),
+									  __res, *__re._M_automaton, __flags, __search_mode);
       if (__ret)
 	{
 	  for (auto& __it : __res)

@@ -103,7 +103,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  auto __end = _M_nfa->_M_insert_dummy();
 	  __alt1._M_append(__end);
 	  __alt2._M_append(__end);
-	  // __alt2 is state._M_next, __alt1 is state._M_alt. The executor
+	  // __alt2 is state._M_next, __alt1 is state._M_alt. The executer
 	  // executes _M_alt before _M_next, as well as executing left
 	  // alternative before right one.
 	  _M_stack.push(_StateSeqT(*_M_nfa,
@@ -134,9 +134,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _Compiler<_TraitsT>::
     _M_term()
     {
-      if (this->_M_assertion())
-	return true;
-      if (this->_M_atom())
+      if (this->_M_assertion() || this->_M_atom())
 	{
 	  while (this->_M_quantifier());
 	  return true;

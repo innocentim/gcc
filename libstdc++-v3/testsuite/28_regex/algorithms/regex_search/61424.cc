@@ -46,8 +46,7 @@ int main()
     const char str[] = "tournament";
     cmatch m;
     VERIFY(regex_search(str, m, re));
-    // TODO: Fix ECMAScript BFS matcher.
-    //VERIFY(regex_search_debug(str, m, re));
+    VERIFY(regex_search_debug(str, m, re));
     VERIFY(sol[i] == m[0]);
     i++;
   }

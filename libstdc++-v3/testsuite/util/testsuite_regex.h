@@ -129,7 +129,7 @@ namespace __gnu_test
       }
   }
 
-  // regex_match_debug behaves like regex_match, but will run *two* executors
+  // regex_match_debug behaves like regex_match, but will run *two* executers
   // (if there's no back-reference) and check if their results agree. If not,
   // an exception is thrown. The arguments are the same as for regex_match.
   template<typename _Bi_iter, typename _Alloc,
@@ -216,7 +216,7 @@ namespace __gnu_test
 		      = std::regex_constants::match_default)
     { return regex_match_debug(__s.begin(), __s.end(), __re, __flags); }
 
-  // regex_match_debug behaves like regex_match, but will run *two* executors
+  // regex_search_debug behaves like regex_search, but will run *two* executers
   // (if there's no back-reference) and check if their results agree. If not,
   // an exception throws. One can use them just in the way of using regex_match.
   template<typename _Bi_iter, typename _Alloc,

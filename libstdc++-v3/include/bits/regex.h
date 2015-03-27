@@ -45,9 +45,6 @@ namespace __detail
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
-  enum class _RegexExecutorPolicy : int
-    { _S_auto, _S_alternate };
-
   template<typename _BiIter, typename _Alloc,
 	   typename _CharT, typename _TraitsT,
 	   _RegexExecutorPolicy __policy,

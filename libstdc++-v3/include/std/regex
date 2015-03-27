@@ -37,6 +37,7 @@
 
 #include <algorithm>
 #include <bitset>
+#include <forward_list>
 #include <functional>
 #ifdef _GLIBCXX_DEBUG
 # include <iosfwd>
@@ -59,8 +60,8 @@
 #include <bits/regex_automaton.h>
 #include <bits/regex_scanner.h>
 #include <bits/regex_compiler.h>
+#include <bits/regex_executer.h>
 #include <bits/regex.h>
-#include <bits/regex_executor.h>
 
 #endif // C++11
 

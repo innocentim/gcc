@@ -88,9 +88,24 @@ test01()
   }
 }
 
+void
+test02()
+{
+  bool test __attribute__((unused)) = true;
+
+  cmatch m;
+  regex re("(?=(as)df)?s(df)");
+  VERIFY(regex_search("asdf", m, re));
+  VERIFY(m.size() == 3);
+  VERIFY(m[0].matched && string(m[0].first, m[0].second) == "sdf");
+  VERIFY(!m[1].matched);
+  VERIFY(m[2].matched && string(m[2].first, m[2].second) == "df");
+}
+
 int
 main()
 {
   test01();
+  test02();
   return 0;
 }
