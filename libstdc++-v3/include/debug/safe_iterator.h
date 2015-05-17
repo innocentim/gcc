@@ -559,10 +559,18 @@ namespace __gnu_debug
     }
 
   template<typename _IteratorL, typename _IteratorR, typename _Sequence>
-    inline bool
+    inline
+#if __cplusplus >= 201103L
+    auto
+#else
+    bool
+#endif
     operator<(const _Safe_iterator<_IteratorL, _Sequence>& __lhs,
 	      const _Safe_iterator<_IteratorR, _Sequence>& __rhs)
     _GLIBCXX_NOEXCEPT
+#if __cplusplus >= 201103L
+    -> decltype(__lhs.base() < __rhs.base())
+#endif
     {
       _GLIBCXX_DEBUG_VERIFY(! __lhs._M_singular() && ! __rhs._M_singular(),
 			    _M_message(__msg_iter_order_bad)
@@ -576,10 +584,18 @@ namespace __gnu_debug
     }
 
   template<typename _Iterator, typename _Sequence>
-    inline bool
+    inline
+#if __cplusplus >= 201103L
+    auto
+#else
+    bool
+#endif
     operator<(const _Safe_iterator<_Iterator, _Sequence>& __lhs,
 	      const _Safe_iterator<_Iterator, _Sequence>& __rhs)
     _GLIBCXX_NOEXCEPT
+#if __cplusplus >= 201103L
+    -> decltype(__lhs.base() < __rhs.base())
+#endif
     {
       _GLIBCXX_DEBUG_VERIFY(! __lhs._M_singular() && ! __rhs._M_singular(),
 			    _M_message(__msg_iter_order_bad)
