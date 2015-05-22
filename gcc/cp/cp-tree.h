@@ -6414,12 +6414,6 @@ typedef void cp_binding_oracle_function (enum cp_oracle_request, tree identifier
 
 extern cp_binding_oracle_function *cp_binding_oracle;
 
-extern void cp_pushtag (location_t, tree, tree);
-extern void cp_bind (location_t, tree, bool);
-
-/* In class.c */
-extern void cp_finish_injected_record_type (tree);
-
 /* in vtable-class-hierarchy.c */
 extern void vtv_compute_class_hierarchy_transitive_closure (void);
 extern void vtv_generate_init_routine           (void);
