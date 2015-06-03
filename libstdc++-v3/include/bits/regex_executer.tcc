@@ -105,6 +105,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{
 	  _M_handle(_Saved_state(__context._M_state), __runner, __context);
 	  while (_M_stack._M_top() != __top)
+	    {
+	      if (__runner._S_is_ecma && __context._M_found)
+		{
+		  _M_cleanup(__top);
+		  break;
+		}
 	    switch (_M_stack._M_top<_Tag>()._M_tag)
 	      {
 #define __HANDLE(_Type) \
@@ -119,21 +125,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	      case _Tag::_S_Saved_last: __HANDLE(_Saved_last); break;
 #undef __HANDLE
 	      };
+	    }
 	}
       __catch (...)
 	{
-	  while (_M_stack._M_top() != __top)
-	    switch (_M_stack._M_top<_Tag>()._M_tag)
-	      {
-	      case _Tag::_S_Saved_state:
-		_M_stack._M_pop<_Saved_state>(); break;
-	      case _Tag::_S_Saved_paren:
-		_M_stack._M_pop<_Saved_paren>(); break;
-	      case _Tag::_S_Saved_position:
-	        _M_stack._M_pop<_Saved_position>(); break;
-	      case _Tag::_S_Saved_last:
-		_M_stack._M_pop<_Saved_last>(); break;
-	      };
+	  _M_cleanup(__top);
 	  __throw_exception_again;
 	}
     }
@@ -178,9 +174,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #define __TAIL_RECURSE(__new_state) { __context._M_state = (__new_state); continue; }
       while (1)
 	{
-	  if (_M_executer._M_visit(__context._M_state, _M_exec_context._M_is_ecma(), __context))
-	    return;
-	  if (_M_exec_context._M_is_ecma() && __context._M_found)
+	  if (_M_executer._M_visited(__context._M_state, __context))
 	    return;
 	  const auto& __state = _M_exec_context._M_get_state(__context._M_state);
 	  const auto& __current = _M_exec_context._M_current;
@@ -244,25 +238,24 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		__TAIL_RECURSE(__state._M_next)
 	      break;
 	    case _S_opcode_subexpr_lookahead:
-	      _GLIBCXX_DEBUG_ASSERT(_M_exec_context._M_is_ecma());
 	      {
 		_Regex_runner __runner(_M_stack._M_stack);
 		__runner._M_init(__current, _M_exec_context._M_end,
 				 *_M_exec_context._M_nfa, _M_exec_context._M_flags,
 				 _M_exec_context._M_search_mode);
-		bool __ret = __runner._M_match_impl(__state._M_alt);
+		_Captures __captures;
+		bool __ret = __runner._M_match_impl(__state._M_alt, __context._M_parens.size(), __captures);
 		if (__ret != __state._M_neg)
 		  {
 		    if (__ret)
 		      {
 			auto& __res = __context._M_parens;
-			const auto& __v = __runner._M_executer._M_get_result();
-			_GLIBCXX_DEBUG_ASSERT(__res.size() == __v.size());
-			for (size_t __i = 0; __i < __v.size(); __i++)
-			  if (__v[__i]._M_matched())
+			_GLIBCXX_DEBUG_ASSERT(__res.size() == __captures.size());
+			for (size_t __i = 0; __i < __captures.size(); __i++)
+			  if (__captures[__i]._M_matched())
 			    {
 			      _M_stack.template _M_push<typename _Regex_stack::_Saved_paren>(__i, __res[__i]);
-			      __res[__i] = __v[__i];
+			      __res[__i] = __captures[__i];
 			    }
 		      }
 		    __TAIL_RECURSE(__state._M_next)
@@ -288,8 +281,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		    __context._M_found = true;
 		  if (_M_exec_context._M_flags & regex_constants::match_not_null)
 		    __context._M_found = __context._M_found && !_M_exec_context._M_at_begin();
-		  _M_executer._M_handle_accept(__context, _M_exec_context._M_is_ecma());
 		}
+	      if (__context._M_found)
+		_M_executer._M_handle_accept(__context._M_parens);
 	      break;
 	    case _S_opcode_unknown:
 	    case _S_opcode_dummy:

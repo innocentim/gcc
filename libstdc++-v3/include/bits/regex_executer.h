@@ -196,7 +196,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       class _Capture
       {
-      public:
+      private:
 	enum _State
 	{
 	  _S_none,
@@ -204,6 +204,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _S_left_and_right,
 	};
 
+      public:
 	_Capture() : _M_state(_S_none) {}
 
 	bool
@@ -278,18 +279,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       struct _Regex_context
       {
-	_Regex_context() = default;
+	_Regex_context()
+	{
+	  _M_last.first = 0;
+	  _M_found = false;
+	}
 
-	_Regex_context(_StateIdT __state, size_t __size)
-	{ _M_reset(__state, __size); }
-
-	void
-	_M_reset(_StateIdT __state, size_t __size)
+	_Regex_context(_StateIdT __state, size_t __size) : _Regex_context()
 	{
 	  _M_state = __state;
-	  _M_last.first = 0;
 	  _M_parens.resize(__size);
-	  _M_found = false;
 	}
 
 	_StateIdT _M_state;
@@ -382,6 +381,23 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  static void
 	  _M_handle(_Saved_last __save, _Runner& __runner, _Regex_context& __context);
 
+	void
+	_M_cleanup(void* __old_top)
+	{
+	  while (_M_stack._M_top() != __old_top)
+	    switch (_M_stack._M_top<_Tag>()._M_tag)
+	      {
+	      case _Tag::_S_Saved_state:
+		_M_stack._M_pop<_Saved_state>(); break;
+	      case _Tag::_S_Saved_paren:
+		_M_stack._M_pop<_Saved_paren>(); break;
+	      case _Tag::_S_Saved_position:
+		_M_stack._M_pop<_Saved_position>(); break;
+	      case _Tag::_S_Saved_last:
+		_M_stack._M_pop<_Saved_last>(); break;
+	      };
+	}
+
 	_Dynamic_stack& _M_stack;
       };
 
@@ -393,10 +409,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  void
 	  _M_reset()
 	  { _M_current = _M_begin; }
-
-	  bool
-	  _M_is_ecma() const
-	  { return _M_nfa->_M_options() & regex_constants::ECMAScript; }
 
 	  const _Traits&
 	  _M_traits() const
@@ -431,26 +443,86 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       template<typename, typename> class _Regex_runner;
 
-      template<typename _Traits>
-	class _Dfs_executer
+      class _Dfs_ecma_mixin
+      {
+      public:
+	void _M_reset(_StateIdT __start, size_t __size)
+	{
+	  _M_context._M_state = __start;
+	  _M_context._M_parens.clear();
+	  _M_context._M_parens.resize(__size);
+	}
+
+	_Regex_context&
+	_M_get_context()
+	{ return _M_context; }
+
+	void
+	_M_get_result(_Captures& __result)
+	{ __result = std::move(_M_context._M_parens); }
+
+	void
+	_M_update(const _Captures& __captures) { }
+
+      private:
+	_Regex_context _M_context;
+      };
+
+      class _Dfs_posix_mixin
+      {
+      public:
+	void _M_reset(_StateIdT __start, size_t __size)
+	{
+	  _M_context._M_state = __start;
+	  _M_context._M_parens.clear();
+	  _M_context._M_parens.resize(__size);
+	  _M_result.clear();
+	}
+
+	_Regex_context&
+	_M_get_context()
+	{ return _M_context; }
+
+	void
+	_M_get_result(_Captures& __result)
+	{ __result = std::move(_M_result); }
+
+	void
+	_M_update(const _Captures& __captures)
+	{
+	  if (_M_result.empty() || _M_leftmost_longest(__captures, _M_result))
+	    _M_result = __captures;
+	}
+
+      private:
+	_Regex_context _M_context;
+	_Captures _M_result;
+      };
+
+      template<typename _Traits, bool __is_ecma>
+	class _Dfs_executer : private std::conditional<__is_ecma, _Dfs_ecma_mixin, _Dfs_posix_mixin>::type
 	{
 	private:
 	  using _Runner = _Regex_runner<_Dfs_executer, _Traits>;
 
 	public:
-	  _Captures&
-	  _M_get_result()
-	  { return _M_result; }
+	  static constexpr bool _S_is_ecma = __is_ecma;
 
 	  bool
-	  _M_search_from_first(_Runner& __runner, _Regex_context& __context)
+	  _M_search_from_first(_Runner& __runner, _StateIdT __start, size_t __size, _Captures& __result)
 	  {
-	    __runner._M_exec(__context);
-	    return __context._M_found;
+	    this->_M_reset(__start, __size);
+	    __runner._M_exec(this->_M_get_context());
+	    if (this->_M_get_context()._M_found)
+	      {
+		this->_M_get_result(__result);
+		return true;
+	      }
+	    return false;
 	  }
 
 	  bool
-	  _M_visit(_StateIdT __state_id, bool __is_ecma, _Regex_context& __context)
+	  _M_visited(_StateIdT __state_id, _Regex_context& __context)
 	  { return false; }
 
 	  bool
@@ -480,29 +552,21 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  }
 
 	  void
-	  _M_handle_accept(_Regex_context& __context, bool __is_ecma)
-	  {
-	    if (__is_ecma || (_M_result.empty() || _M_leftmost_longest(__context._M_parens, _M_get_result())))
-	      _M_get_result() = __context._M_parens;
-	  }
-
-	private:
-	  _Captures _M_result;
+	  _M_handle_accept(const _Captures& __captures)
+	  { this->_M_update(__captures); }
 	};
 
-      template<typename _Traits>
+      template<typename _Traits, bool __is_ecma>
 	class _Bfs_executer
 	{
 	private:
 	  using _Runner = _Regex_runner<_Bfs_executer, _Traits>;
 
 	public:
-	  _Captures&
-	  _M_get_result()
-	  { return _M_result; }
+	  static constexpr bool _S_is_ecma = __is_ecma;
 
 	  bool
-	  _M_visit(_StateIdT __state_id, bool __is_ecma, _Regex_context& __context)
+	  _M_visited(_StateIdT __state_id, _Regex_context& __context)
 	  {
 	    if (_M_is_visited[__state_id])
 	      {
@@ -518,13 +582,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  }
 
 	  bool
-	  _M_search_from_first(_Runner& __runner, _Regex_context& __context)
+	  _M_search_from_first(_Runner& __runner, _StateIdT __start, size_t __size, _Captures& __result)
 	  {
 	    _M_is_visited.resize(__runner._M_exec_context._M_nfa->size());
 	    _M_current_positions.resize(__runner._M_exec_context._M_nfa->size());
 	    _M_contexts.clear();
-	    _M_contexts.emplace_back(std::move(__context));
-	    return _M_search_from_first_impl(__runner);
+	    _M_contexts.emplace_back(__start, __size);
+	    if (_M_search_from_first_impl(__runner))
+	      {
+		__result = std::move(_M_result);
+		return true;
+	      }
+	    return false;
 	  }
 
 	  bool
@@ -550,7 +619,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  {
 	    if (!__state._M_matches(*__runner._M_exec_context._M_current))
 	      return false;
-	    if (__runner._M_exec_context._M_is_ecma() && _M_found)
+	    if (__is_ecma && _M_found)
 	      return false;
 	    _M_contexts.emplace_back(__context);
 	    _M_contexts.back()._M_state = __state._M_next;
@@ -565,11 +634,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  }
 
 	  void
-	  _M_handle_accept(_Regex_context& __context, bool __is_ecma)
+	  _M_handle_accept(const _Captures& __captures)
 	  {
 	    _M_found = true;
-	    if (__is_ecma || (_M_result.empty() || _M_leftmost_longest(__context._M_parens, _M_get_result())))
-	      _M_get_result() = __context._M_parens;
+	    if (__is_ecma || (_M_result.empty() || _M_leftmost_longest(__captures, _M_result)))
+	      _M_result = __captures;
 	  }
 
 	private:
@@ -583,6 +652,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       template<typename _Executer, typename _Traits>
 	class _Regex_runner
 	{
+	private:
+	  static constexpr bool _S_is_ecma = _Executer::_S_is_ecma;
+
 	public:
 	  _Regex_runner(_Dynamic_stack& __dynamic_stack) : _M_stack(__dynamic_stack) { }
 
@@ -602,15 +674,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    bool
 	    _M_match(std::vector<sub_match<_Bp>, _Alloc>& __res)
 	    {
-	      if (_M_match_impl(_M_exec_context._M_nfa->_M_start()))
+	      _Captures __result;
+	      if (_M_match_impl(_M_exec_context._M_nfa->_M_start(), _M_exec_context._M_nfa->_M_sub_count(), __result))
 		{
-		  const auto& __v = _M_executer._M_get_result();
-		  _GLIBCXX_DEBUG_ASSERT(__res.size() >= __v.size());
-		  for (size_t __i = 0; __i < __v.size(); __i++)
-		    if ((__res[__i].matched = __v[__i]._M_matched()))
+		  _GLIBCXX_DEBUG_ASSERT(__res.size() >= __result.size());
+		  for (size_t __i = 0; __i < __result.size(); __i++)
+		    if ((__res[__i].matched = __result[__i]._M_matched()))
 		      {
-			__res[__i].first = __v[__i]._M_get_left();
-			__res[__i].second = __v[__i]._M_get_right();
+			__res[__i].first = __result[__i]._M_get_left();
+			__res[__i].second = __result[__i]._M_get_right();
 		      }
 		  return true;
 		}
@@ -623,29 +695,21 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  { _M_stack._M_exec(__context, *this); }
 
 	  void
-	  _M_reset(_Regex_context& __context, _StateIdT __start)
-	  {
-	    _M_exec_context._M_reset();
-	    __context._M_reset(__start, _M_exec_context._M_nfa->_M_sub_count());
-	  }
-
-	  void
 	  _M_dfs(_Regex_context& __context);
 
 	  bool
-	  _M_search_from_first_helper(_Regex_context& __context, _StateIdT __start)
+	  _M_search_from_first_helper(_StateIdT __start, _Captures& __result)
 	  {
-	    _M_reset(__context, __start);
-	    return _M_executer._M_search_from_first(*this, __context);
+	    _M_exec_context._M_reset();
+	    return _M_executer._M_search_from_first(*this, __start, _M_exec_context._M_nfa->_M_sub_count(), __result);
 	  }
 
 	  bool
-	  _M_match_impl(_StateIdT __start)
+	  _M_match_impl(_StateIdT __start, size_t __size, _Captures& __result)
 	  {
-	    _Regex_context __context;
 	    if (_M_exec_context._M_search_mode == _Regex_search_mode::_Exact)
-	      return _M_search_from_first_helper(__context, __start);
-	    if (_M_search_from_first_helper(__context, __start))
+	      return _M_search_from_first_helper(__start, __result);
+	    if (_M_search_from_first_helper(__start, __result))
 	      return true;
 	    if (_M_exec_context._M_flags & regex_constants::match_continuous)
 	      return false;
@@ -653,7 +717,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    while (_M_exec_context._M_begin != _M_exec_context._M_end)
 	      {
 		++_M_exec_context._M_begin;
-		if (_M_search_from_first_helper(__context, __start))
+		if (_M_search_from_first_helper(__start, __result))
 		  return true;
 	      }
 	    return false;
@@ -665,8 +729,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _Executer _M_executer;
 
 	  friend class _Regex_stack;
-	  template<typename _Tp> friend class _Dfs_executer;
-	  template<typename _Tp> friend class _Bfs_executer;
+	  template<typename, bool> friend class _Dfs_executer;
+	  template<typename, bool> friend class _Bfs_executer;
 	};
 
       template<_RegexExecutorPolicy __policy, typename _Bp, typename _Alloc, typename _Traits>
@@ -677,17 +741,27 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	      regex_constants::match_flag_type __flags,
 	      _Regex_search_mode __search_mode)
 	{
-	  if ((__nfa._M_options() & regex_constants::__polynomial)
-	      || (__policy == _RegexExecutorPolicy::_S_alternate
-		  && !__nfa._M_has_backref))
-	    {
-	      _Regex_runner<_Bfs_executer<_Traits>, _Traits> __runner(__get_dynamic_stack());
-	      __runner._M_init(__s, __e, __nfa, __flags, __search_mode);
-	      return __runner._M_match(__res);
-	    }
-	  _Regex_runner<_Dfs_executer<_Traits>, _Traits> __runner(__get_dynamic_stack());
-	  __runner._M_init(__s, __e, __nfa, __flags, __search_mode);
-	  return __runner._M_match(__res);
+	  bool __use_bfs = 
+	    (__nfa._M_options() & regex_constants::__polynomial)
+	    || (__policy == _RegexExecutorPolicy::_S_alternate
+		&& !__nfa._M_has_backref);
+	  bool __is_ecma = __nfa._M_options() & regex_constants::ECMAScript;
+#define _RUN(_EXECUTER_TYPE, __IS_ECMA) \
+	    do \
+	      { \
+		_Regex_runner<_EXECUTER_TYPE<_Traits, __IS_ECMA>, _Traits> __runner(__get_dynamic_stack()); \
+		__runner._M_init(__s, __e, __nfa, __flags, __search_mode); \
+		return __runner._M_match(__res); \
+	      } \
+	    while (false)
+	  if (!__use_bfs && __is_ecma)
+	    _RUN(_Dfs_executer, true);
+	  else if (!__use_bfs && !__is_ecma)
+	    _RUN(_Dfs_executer, false);
+	  else if (__use_bfs && __is_ecma)
+	    _RUN(_Bfs_executer, true);
+	  else
+	    _RUN(_Bfs_executer, false);
 	}
     };
 
