@@ -67,11 +67,26 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
     template<typename _Tp>
       _Tp&
-      _M_top();
+      _M_top_item();
 
     void*
     _M_top() const noexcept
     { return _M_blocks.front()._M_top; }
+
+    void
+    _M_jump(void* __old_top) noexcept
+    {
+      while (!((_M_blocks.front()._M_data <= __old_top && __old_top < std::end(_M_blocks.front()._M_data))
+	       || (__old_top == std::end(_M_blocks.front()._M_data) && __old_top == _M_base)))
+	_M_blocks.pop_front();
+      _M_top_frame() = __old_top;
+    }
+
+#ifdef _GLIBCXX_DEBUG
+    bool
+    _M_empty() const noexcept
+    { return _M_top() == _M_base; }
+#endif
 
   private:
     struct _Block
@@ -99,7 +114,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
     void*&
     _M_top_frame() noexcept
-    { return _M_blocks.front()._M_top; }
+    {
+      auto __top = _M_blocks.front()._M_top;
+      _GLIBCXX_DEBUG_ASSERT(_M_blocks.front()._M_data <= __top && __top <= std::end(_M_blocks.front()._M_data));
+      return _M_blocks.front()._M_top;
+    }
 
     std::forward_list<_Block> _M_blocks;
     void* _M_base;
@@ -280,10 +299,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       struct _Regex_context
       {
 	_Regex_context()
-	{
-	  _M_last.first = 0;
-	  _M_found = false;
-	}
+	{ _M_found = false; }
 
 	_Regex_context(_StateIdT __state, size_t __size) : _Regex_context()
 	{
@@ -292,10 +308,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
 
 	_StateIdT _M_state;
-	std::pair<int, _Bi_iter> _M_last;
 	_Captures _M_parens;
 	bool _M_found;
       };
+
+      template<typename _Executer>
+	class _Regex_runner;
 
       struct _Regex_stack
       {
@@ -347,7 +365,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	struct _Saved_last : public _Tag
 	{
 	  explicit
-	  _Saved_last(std::pair<int, _Bi_iter> __last)
+	  _Saved_last(const std::pair<int, _Bi_iter>& __last)
 	  : _Tag(_Tag::_S_Saved_last), _M_last(__last) { }
 
 	  std::pair<int, _Bi_iter> _M_last;
@@ -361,41 +379,44 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _M_push(_Args&&... __args)
 	  { _M_stack._M_push<_Tp>(_Tp(std::forward<_Args>(__args)...)); }
 
-	template<typename _Runner>
+	template<template<typename, bool> class _Executer_tmpl, typename _Traits, bool __is_ecma>
 	  void
-	  _M_exec(_Regex_context& __context, _Runner& __runner);
-
-	template<typename _Runner>
-	  void
-	  _M_handle(_Saved_state __save, _Runner& __runner, _Regex_context& __context);
+	  _M_exec(_Regex_context& __context, _Regex_runner<_Executer_tmpl<_Traits, __is_ecma>>& __runner);
 
 	template<typename _Runner>
 	  static void
-	  _M_handle(_Saved_paren __save, _Runner& __runner, _Regex_context& __context);
+	  _M_handle(const _Saved_state& __save, _Runner& __runner, _Regex_context& __context);
 
 	template<typename _Runner>
 	  static void
-	  _M_handle(_Saved_position __save, _Runner& __runner, _Regex_context& __context);
+	  _M_handle(const _Saved_paren& __save, _Runner& __runner, _Regex_context& __context);
 
 	template<typename _Runner>
 	  static void
-	  _M_handle(_Saved_last __save, _Runner& __runner, _Regex_context& __context);
+	  _M_handle(const _Saved_position& __save, _Runner& __runner, _Regex_context& __context);
+
+	template<typename _Runner>
+	  static void
+	  _M_handle(const _Saved_last& __save, _Runner& __runner, _Regex_context& __context);
 
 	void
-	_M_cleanup(void* __old_top)
+	_M_cleanup(void* __old_top) noexcept
 	{
-	  while (_M_stack._M_top() != __old_top)
-	    switch (_M_stack._M_top<_Tag>()._M_tag)
-	      {
-	      case _Tag::_S_Saved_state:
-		_M_stack._M_pop<_Saved_state>(); break;
-	      case _Tag::_S_Saved_paren:
-		_M_stack._M_pop<_Saved_paren>(); break;
-	      case _Tag::_S_Saved_position:
-		_M_stack._M_pop<_Saved_position>(); break;
-	      case _Tag::_S_Saved_last:
-		_M_stack._M_pop<_Saved_last>(); break;
-	      };
+	  if (is_trivially_destructible<_Bi_iter>::value)
+	    _M_stack._M_jump(__old_top);
+	  else
+	    while (_M_stack._M_top() != __old_top)
+	      switch (_M_stack._M_top_item<_Tag>()._M_tag)
+		{
+		case _Tag::_S_Saved_state:
+		  _M_stack._M_pop<_Saved_state>(); break;
+		case _Tag::_S_Saved_paren:
+		  _M_stack._M_pop<_Saved_paren>(); break;
+		case _Tag::_S_Saved_position:
+		  _M_stack._M_pop<_Saved_position>(); break;
+		case _Tag::_S_Saved_last:
+		  _M_stack._M_pop<_Saved_last>(); break;
+		};
 	}
 
 	_Dynamic_stack& _M_stack;
@@ -440,8 +461,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _Bi_iter _M_current;
 	  const _NFA<_Traits>* _M_nfa;
 	};
-
-      template<typename, typename> class _Regex_runner;
 
       class _Dfs_ecma_mixin
       {
@@ -503,14 +522,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	class _Dfs_executer : private std::conditional<__is_ecma, _Dfs_ecma_mixin, _Dfs_posix_mixin>::type
 	{
 	private:
-	  using _Runner = _Regex_runner<_Dfs_executer, _Traits>;
+	  using _Runner = _Regex_runner<_Dfs_executer>;
 
 	public:
-	  static constexpr bool _S_is_ecma = __is_ecma;
-
 	  bool
 	  _M_search_from_first(_Runner& __runner, _StateIdT __start, size_t __size, _Captures& __result)
 	  {
+	    _M_last.first = 0;
 	    this->_M_reset(__start, __size);
 	    __runner._M_exec(this->_M_get_context());
 	    if (this->_M_get_context()._M_found)
@@ -524,6 +542,33 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  bool
 	  _M_visited(_StateIdT __state_id, _Regex_context& __context)
 	  { return false; }
+
+	  bool
+	  _M_handle_repeat(_Runner& __runner, const _State<_Traits>& __state, _Regex_context& __context)
+	  {
+	    const auto& __current = __runner._M_exec_context._M_current;
+	    if (_M_last.first == 2 && _M_last.second == __current)
+	      return false;
+
+	    _StateIdT __first = __state._M_alt, __second = __state._M_next;
+	    if (__state._M_neg)
+	      swap(__first, __second);
+	    __runner._M_stack.template _M_push<typename _Regex_stack::_Saved_state>(__second);
+	    __runner._M_stack.template _M_push<typename _Regex_stack::_Saved_last>(_M_last);
+	    if (_M_last.first == 0 || _M_last.second != __current)
+	      {
+		_M_last.first = 0;
+		_M_last.second = __current;
+	      }
+	    _M_last.first++;
+
+	    __context._M_state = __first;
+	    return true;
+	  }
+
+	  void
+	  _M_set_last(const std::pair<int, _Bi_iter>& __last)
+	  { _M_last = __last; }
 
 	  bool
 	  _M_handle_match(_Runner& __runner, const _State<_Traits>& __state, _Regex_context& __context)
@@ -554,17 +599,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  void
 	  _M_handle_accept(const _Captures& __captures)
 	  { this->_M_update(__captures); }
+
+	private:
+	  std::pair<int, _Bi_iter> _M_last;
 	};
 
       template<typename _Traits, bool __is_ecma>
 	class _Bfs_executer
 	{
 	private:
-	  using _Runner = _Regex_runner<_Bfs_executer, _Traits>;
+	  using _Runner = _Regex_runner<_Bfs_executer>;
 
 	public:
-	  static constexpr bool _S_is_ecma = __is_ecma;
-
 	  bool
 	  _M_visited(_StateIdT __state_id, _Regex_context& __context)
 	  {
@@ -615,6 +661,20 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  }
 
 	  bool
+	  _M_handle_repeat(_Runner& __runner, const _State<_Traits>& __state, _Regex_context& __context)
+	  {
+	    _StateIdT __first = __state._M_alt, __second = __state._M_next;
+	    if (__state._M_neg)
+	      swap(__first, __second);
+	    __runner._M_stack.template _M_push<typename _Regex_stack::_Saved_state>(__second);
+	    __context._M_state = __first;
+	    return true;
+	  }
+
+	  void
+	  _M_set_last(const std::pair<int, _Bi_iter>& __last) { }
+
+	  bool
 	  _M_handle_match(_Runner& __runner, const _State<_Traits>& __state, const _Regex_context& __context)
 	  {
 	    if (!__state._M_matches(*__runner._M_exec_context._M_current))
@@ -649,11 +709,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  bool _M_found;
 	};
 
-      template<typename _Executer, typename _Traits>
-	class _Regex_runner
+      template<template<typename, bool> class _Executer_tmpl, typename _Traits, bool __is_ecma>
+	class _Regex_runner<_Executer_tmpl<_Traits, __is_ecma>>
 	{
 	private:
-	  static constexpr bool _S_is_ecma = _Executer::_S_is_ecma;
+	  using _Executer = _Executer_tmpl<_Traits, __is_ecma>;
 
 	public:
 	  _Regex_runner(_Dynamic_stack& __dynamic_stack) : _M_stack(__dynamic_stack) { }
@@ -746,12 +806,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    || (__policy == _RegexExecutorPolicy::_S_alternate
 		&& !__nfa._M_has_backref);
 	  bool __is_ecma = __nfa._M_options() & regex_constants::ECMAScript;
+	  bool __ret;
 #define _RUN(_EXECUTER_TYPE, __IS_ECMA) \
 	    do \
 	      { \
-		_Regex_runner<_EXECUTER_TYPE<_Traits, __IS_ECMA>, _Traits> __runner(__get_dynamic_stack()); \
+		_Regex_runner<_EXECUTER_TYPE<_Traits, __IS_ECMA>> __runner(__get_dynamic_stack()); \
 		__runner._M_init(__s, __e, __nfa, __flags, __search_mode); \
-		return __runner._M_match(__res); \
+		__ret = __runner._M_match(__res); \
 	      } \
 	    while (false)
 	  if (!__use_bfs && __is_ecma)
@@ -762,6 +823,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    _RUN(_Bfs_executer, true);
 	  else
 	    _RUN(_Bfs_executer, false);
+	  _GLIBCXX_DEBUG_ASSERT(__get_dynamic_stack()._M_empty());
+	  return __ret;
 	}
     };
 

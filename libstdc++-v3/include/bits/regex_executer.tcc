@@ -66,7 +66,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _Tp>
     _Tp&
-    _Dynamic_stack::_M_top()
+    _Dynamic_stack::_M_top_item()
     {
       using _Elem = pair<size_t, _Tp>;
       auto __p = static_cast<_Elem*>(_M_top_frame());
@@ -95,10 +95,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   }
 
   template<typename _Bi_iter>
-  template<typename _Runner>
+  template<template<typename, bool> class _Executer_tmpl, typename _Traits, bool __is_ecma>
     void
     _Regex_run<_Bi_iter>::_Regex_stack::
-    _M_exec(_Regex_context& __context, _Runner& __runner)
+    _M_exec(_Regex_context& __context, _Regex_runner<_Executer_tmpl<_Traits, __is_ecma>>& __runner)
     {
       void* __top = _M_stack._M_top();
       __try
@@ -106,25 +106,25 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _M_handle(_Saved_state(__context._M_state), __runner, __context);
 	  while (_M_stack._M_top() != __top)
 	    {
-	      if (__runner._S_is_ecma && __context._M_found)
+	      if (__is_ecma && __context._M_found)
 		{
 		  _M_cleanup(__top);
 		  break;
 		}
-	    switch (_M_stack._M_top<_Tag>()._M_tag)
-	      {
+	      switch (_M_stack._M_top_item<_Tag>()._M_tag)
+		{
 #define __HANDLE(_Type) \
-		{\
-		  auto __save = std::move(_M_stack._M_top<_Type>());\
-		  _M_stack._M_pop<_Type>();\
-		  _M_handle(std::move(__save), __runner, __context);\
-		}
-	      case _Tag::_S_Saved_state: __HANDLE(_Saved_state); break;
-	      case _Tag::_S_Saved_paren: __HANDLE(_Saved_paren); break;
-	      case _Tag::_S_Saved_position: __HANDLE(_Saved_position); break;
-	      case _Tag::_S_Saved_last: __HANDLE(_Saved_last); break;
+		    {\
+		      auto __save = std::move(_M_stack._M_top_item<_Type>());\
+		      _M_stack._M_pop<_Type>();\
+		      _M_handle(__save, __runner, __context);\
+		    }
+		case _Tag::_S_Saved_state: __HANDLE(_Saved_state); break;
+		case _Tag::_S_Saved_paren: __HANDLE(_Saved_paren); break;
+		case _Tag::_S_Saved_position: __HANDLE(_Saved_position); break;
+		case _Tag::_S_Saved_last: __HANDLE(_Saved_last); break;
 #undef __HANDLE
-	      };
+		};
 	    }
 	}
       __catch (...)
@@ -138,7 +138,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Runner>
     void
     _Regex_run<_Bi_iter>::_Regex_stack::
-    _M_handle(_Saved_state __save, _Runner& __runner, _Regex_context& __context)
+    _M_handle(const _Saved_state& __save, _Runner& __runner, _Regex_context& __context)
     {
       __context._M_state = __save._M_state;
       __runner._M_dfs(__context);
@@ -148,27 +148,27 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Runner>
     void
     _Regex_run<_Bi_iter>::_Regex_stack::
-    _M_handle(_Saved_paren __save, _Runner& __runner, _Regex_context& __context)
+    _M_handle(const _Saved_paren& __save, _Runner& __runner, _Regex_context& __context)
     { __context._M_parens[__save._M_index] = std::move(__save._M_paren); }
 
   template<typename _Bi_iter>
   template<typename _Runner>
     void
     _Regex_run<_Bi_iter>::_Regex_stack::
-    _M_handle(_Saved_position __save, _Runner& __runner, _Regex_context& __context)
+    _M_handle(const _Saved_position& __save, _Runner& __runner, _Regex_context& __context)
     { __runner._M_exec_context._M_current = std::move(__save._M_position); }
 
   template<typename _Bi_iter>
   template<typename _Runner>
     void
     _Regex_run<_Bi_iter>::_Regex_stack::
-    _M_handle(_Saved_last __save, _Runner& __runner, _Regex_context& __context)
-    { __context._M_last = __save._M_last; }
+    _M_handle(const _Saved_last& __save, _Runner& __runner, _Regex_context& __context)
+    { __runner._M_executer._M_set_last(__save._M_last); }
 
   template<typename _Bi_iter>
-  template<typename _Executer, typename _Traits>
+  template<template<typename, bool> class _Executer_tmpl, typename _Traits, bool __is_ecma>
     void
-    _Regex_run<_Bi_iter>::_Regex_runner<_Executer, _Traits>::
+    _Regex_run<_Bi_iter>::_Regex_runner<_Executer_tmpl<_Traits, __is_ecma>>::
     _M_dfs(_Regex_context& __context)
     {
 #define __TAIL_RECURSE(__new_state) { __context._M_state = (__new_state); continue; }
@@ -181,26 +181,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  switch (__state._M_opcode)
 	    {
 	    case _S_opcode_repeat:
-	      if (__context._M_last.second == __current && __context._M_last.first == 2)
-		break;
-	      if (!__state._M_neg)
-		_M_stack.template _M_push<typename _Regex_stack::_Saved_state>(__state._M_next);
-	      else
-		_M_stack.template _M_push<typename _Regex_stack::_Saved_state>(__state._M_alt);
-	      _M_stack.template _M_push<typename _Regex_stack::_Saved_last>(__context._M_last);
-	      if (__context._M_last.second == __current)
-		{
-		  __context._M_last.first++;
-		}
-	      else
-		{
-		  __context._M_last.first = 1;
-		  __context._M_last.second = __current;
-		}
-	      if (!__state._M_neg)
-		__TAIL_RECURSE(__state._M_alt)
-	      else
-		__TAIL_RECURSE(__state._M_next)
+	      if (_M_executer._M_handle_repeat(*this, __state, __context))
+		continue;
 	      break;
 	    case _S_opcode_alternative:
 	      _M_stack.template _M_push<typename _Regex_stack::_Saved_state>(__state._M_next);
