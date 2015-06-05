@@ -200,7 +200,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   enum class _RegexExecutorPolicy : int { _S_auto, _S_alternate };
 
   template<typename _Bi_iter>
-    struct _Regex_run
+    struct _Regex_scope
     {
       class _Capture
       {
@@ -270,12 +270,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	return __lv < __rv;
       }
 
-      struct _Regex_context
+      struct _Match_head
       {
-	_Regex_context()
+	_Match_head()
 	{ _M_found = false; }
 
-	_Regex_context(_StateIdT __state, size_t __size) : _Regex_context()
+	_Match_head(_StateIdT __state, size_t __size) : _Match_head()
 	{
 	  _M_state = __state;
 	  _M_parens.resize(__size);
@@ -289,7 +289,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       template<typename _Executer>
 	class _Regex_runner;
 
-      class _Regex_stack
+      class _Stack_handlers
       {
       public:
 	struct _Tag
@@ -346,7 +346,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	};
 
 	explicit
-	_Regex_stack(_Dynamic_stack& __stack) : _M_stack(__stack) { }
+	_Stack_handlers(_Dynamic_stack& __stack) : _M_stack(__stack) { }
 
 	template<typename _Tp, typename... _Args>
 	  void
@@ -355,24 +355,24 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 	template<template<typename, bool> class _Executer_tmpl, typename _Traits, bool __is_ecma>
 	  void
-	  _M_exec(_Regex_context& __context, _Regex_runner<_Executer_tmpl<_Traits, __is_ecma>>& __runner);
+	  _M_exec(_Match_head& __head, _Regex_runner<_Executer_tmpl<_Traits, __is_ecma>>& __runner);
 
       private:
 	template<typename _Runner>
 	  static void
-	  _M_handle(const _Saved_state& __save, _Runner& __runner, _Regex_context& __context);
+	  _M_handle(const _Saved_state& __save, _Runner& __runner, _Match_head& __head);
 
 	template<typename _Runner>
 	  static void
-	  _M_handle(const _Saved_paren& __save, _Runner& __runner, _Regex_context& __context);
+	  _M_handle(const _Saved_paren& __save, _Runner& __runner, _Match_head& __head);
 
 	template<typename _Runner>
 	  static void
-	  _M_handle(const _Saved_position& __save, _Runner& __runner, _Regex_context& __context);
+	  _M_handle(const _Saved_position& __save, _Runner& __runner, _Match_head& __head);
 
 	template<typename _Runner>
 	  static void
-	  _M_handle(const _Saved_last& __save, _Runner& __runner, _Regex_context& __context);
+	  _M_handle(const _Saved_last& __save, _Runner& __runner, _Match_head& __head);
 
 	void
 	_M_cleanup(void* __old_top) noexcept;
@@ -381,7 +381,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       };
 
       template<typename _Traits>
-	class _Executer_context
+	class _Context
 	{
 	public:
 	  using _Char = typename iterator_traits<_Bi_iter>::value_type;
@@ -410,7 +410,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _M_word_boundary() const;
 
 	  bool
-	  _M_match_backref(unsigned int __index, _Regex_context& __context, _Bi_iter& __current);
+	  _M_match_backref(unsigned int __index, _Match_head& __head, _Bi_iter& __current);
 
 	  _Bi_iter _M_begin;
 	  _Bi_iter _M_end;
@@ -425,24 +425,24 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       public:
 	void _M_reset(_StateIdT __start, size_t __size)
 	{
-	  _M_context._M_state = __start;
-	  _M_context._M_parens.clear();
-	  _M_context._M_parens.resize(__size);
+	  _M_head._M_state = __start;
+	  _M_head._M_parens.clear();
+	  _M_head._M_parens.resize(__size);
 	}
 
-	_Regex_context&
-	_M_get_context()
-	{ return _M_context; }
+	_Match_head&
+	_M_get_head()
+	{ return _M_head; }
 
 	void
 	_M_get_result(_Captures& __result)
-	{ __result = std::move(_M_context._M_parens); }
+	{ __result = std::move(_M_head._M_parens); }
 
 	void
 	_M_update(const _Captures& __captures) { }
 
       private:
-	_Regex_context _M_context;
+	_Match_head _M_head;
       };
 
       class _Dfs_posix_mixin
@@ -450,15 +450,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       public:
 	void _M_reset(_StateIdT __start, size_t __size)
 	{
-	  _M_context._M_state = __start;
-	  _M_context._M_parens.clear();
-	  _M_context._M_parens.resize(__size);
+	  _M_head._M_state = __start;
+	  _M_head._M_parens.clear();
+	  _M_head._M_parens.resize(__size);
 	  _M_result.clear();
 	}
 
-	_Regex_context&
-	_M_get_context()
-	{ return _M_context; }
+	_Match_head&
+	_M_get_head()
+	{ return _M_head; }
 
 	void
 	_M_get_result(_Captures& __result)
@@ -472,7 +472,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
 
       private:
-	_Regex_context _M_context;
+	_Match_head _M_head;
 	_Captures _M_result;
       };
 
@@ -487,21 +487,21 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _M_search_from_first(_Runner& __runner, _StateIdT __start, size_t __size, _Captures& __result);
 
 	  bool
-	  _M_visited(_StateIdT __state_id, _Regex_context& __context)
+	  _M_visited(_StateIdT __state_id, _Match_head& __head)
 	  { return false; }
 
 	  bool
-	  _M_handle_repeat(_Runner& __runner, const _State<_Traits>& __state, _Regex_context& __context);
+	  _M_handle_repeat(_Runner& __runner, const _State<_Traits>& __state, _Match_head& __head);
 
 	  void
 	  _M_set_last(const std::pair<int, _Bi_iter>& __last)
 	  { _M_last = __last; }
 
 	  bool
-	  _M_handle_match(_Runner& __runner, const _State<_Traits>& __state, _Regex_context& __context);
+	  _M_handle_match(_Runner& __runner, const _State<_Traits>& __state, _Match_head& __head);
 
 	  bool
-	  _M_handle_backref(_Runner& __runner, const _State<_Traits>& __state, _Regex_context& __context);
+	  _M_handle_backref(_Runner& __runner, const _State<_Traits>& __state, _Match_head& __head);
 
 	  void
 	  _M_handle_accept(const _Captures& __captures)
@@ -519,22 +519,22 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 	public:
 	  bool
-	  _M_visited(_StateIdT __state_id, _Regex_context& __context);
+	  _M_visited(_StateIdT __state_id, _Match_head& __head);
 
 	  bool
 	  _M_search_from_first(_Runner& __runner, _StateIdT __start, size_t __size, _Captures& __result);
 
 	  bool
-	  _M_handle_repeat(_Runner& __runner, const _State<_Traits>& __state, _Regex_context& __context);
+	  _M_handle_repeat(_Runner& __runner, const _State<_Traits>& __state, _Match_head& __head);
 
 	  bool
-	  _M_handle_match(_Runner& __runner, const _State<_Traits>& __state, const _Regex_context& __context);
+	  _M_handle_match(_Runner& __runner, const _State<_Traits>& __state, const _Match_head& __head);
 
 	  void
 	  _M_handle_accept(const _Captures& __captures);
 
 	  bool
-	  _M_handle_backref(_Runner& __runner, const _State<_Traits>& __state, _Regex_context& __context)
+	  _M_handle_backref(_Runner& __runner, const _State<_Traits>& __state, _Match_head& __head)
 	  {
 	    _GLIBCXX_DEBUG_ASSERT(false);
 	    return false;
@@ -549,7 +549,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 	  std::vector<bool> _M_is_visited;
 	  std::vector<_Captures> _M_current_positions;
-	  std::vector<_Regex_context> _M_contexts;
+	  std::vector<_Match_head> _M_heads;
 	  _Captures _M_result;
 	  bool _M_found;
 	};
@@ -567,7 +567,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _M_init(_Bi_iter __begin, _Bi_iter __end, const _NFA<_Traits>& __nfa,
 		  regex_constants::match_flag_type __flags,
 		  _Regex_search_mode __search_mode)
-	  { _M_exec_context._M_init(__begin, __end, __nfa, __flags, __search_mode); }
+	  { _M_context._M_init(__begin, __end, __nfa, __flags, __search_mode); }
 
 	  template<typename _Bp, typename _Alloc>
 	    bool
@@ -580,18 +580,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  bool
 	  _M_search_from_first_helper(_StateIdT __start, _Captures& __result)
 	  {
-	    _M_exec_context._M_reset();
-	    return _M_executer._M_search_from_first(*this, __start, _M_exec_context._M_nfa->_M_sub_count(), __result);
+	    _M_context._M_reset();
+	    return _M_executer._M_search_from_first(*this, __start, _M_context._M_nfa->_M_sub_count(), __result);
 	  }
 
 	  void
-	  _M_dfs(_Regex_context& __context);
+	  _M_dfs(_Match_head& __head);
 
-	  _Regex_stack _M_stack;
-	  _Executer_context<_Traits> _M_exec_context;
+	  _Stack_handlers _M_stack;
+	  _Context<_Traits> _M_context;
 	  _Executer _M_executer;
 
-	  friend class _Regex_stack;
+	  friend class _Stack_handlers;
 	  template<typename, bool> friend class _Dfs_executer;
 	  template<typename, bool> friend class _Bfs_executer;
 	};

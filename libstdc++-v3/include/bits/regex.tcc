@@ -64,8 +64,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       using _Comparable_iter_type = __comparable_iter_helper::type<_BiIter>;
       auto __search_mode = __match_mode ? _Regex_search_mode::_Exact : _Regex_search_mode::_Prefix;
-      __ret = _Regex_run<_Comparable_iter_type>::template __run<__policy>(_Comparable_iter_type(std::move(__s)), _Comparable_iter_type(std::move(__e)),
-									  __res, *__re._M_automaton, __flags, __search_mode);
+      __ret = _Regex_scope<_Comparable_iter_type>::template __run<__policy>(_Comparable_iter_type(std::move(__s)), _Comparable_iter_type(std::move(__e)), __res, *__re._M_automaton, __flags, __search_mode);
       if (__ret)
 	{
 	  for (auto& __it : __res)
