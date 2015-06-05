@@ -202,6 +202,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Bi_iter>
     struct _Regex_scope
     {
+      using _Char = typename iterator_traits<_Bi_iter>::value_type;
+
       class _Capture
       {
       private:
@@ -286,9 +288,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	bool _M_found;
       };
 
-      template<typename _Executer>
-	class _Regex_runner;
-
       class _Stack_handlers
       {
       public:
@@ -353,9 +352,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _M_push(_Args&&... __args)
 	  { _M_stack._M_push<_Tp>(_Tp(std::forward<_Args>(__args)...)); }
 
-	template<template<typename, bool> class _Executer_tmpl, typename _Traits, bool __is_ecma>
+	template<typename _Runner>
 	  void
-	  _M_exec(_Match_head& __head, _Regex_runner<_Executer_tmpl<_Traits, __is_ecma>>& __runner);
+	  _M_exec(_Match_head& __head, _Runner& __runner);
 
       private:
 	template<typename _Runner>
@@ -379,46 +378,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 	_Dynamic_stack& _M_stack;
       };
-
-      template<typename _Traits>
-	class _Context
-	{
-	public:
-	  using _Char = typename iterator_traits<_Bi_iter>::value_type;
-
-	  void
-	  _M_init(_Bi_iter __begin, _Bi_iter __end, const _NFA<_Traits>& __nfa,
-		  regex_constants::match_flag_type __flags,
-		  _Regex_search_mode __search_mode);
-
-	  void
-	  _M_reset()
-	  { _M_current = _M_begin; }
-
-	  const _Traits&
-	  _M_traits() const
-	  { return _M_nfa->_M_traits; }
-
-	  const _State<_Traits>&
-	  _M_get_state(_StateIdT __state_id) const
-	  { return (*_M_nfa)[__state_id]; }
-
-	  bool
-	  _M_is_word(_Char __ch) const;
-
-	  bool
-	  _M_word_boundary() const;
-
-	  bool
-	  _M_match_backref(unsigned int __index, _Match_head& __head, _Bi_iter& __current);
-
-	  _Bi_iter _M_begin;
-	  _Bi_iter _M_end;
-	  _Bi_iter _M_current;
-	  const _NFA<_Traits>* _M_nfa;
-	  regex_constants::match_flag_type _M_flags;
-	  _Regex_search_mode _M_search_mode;
-	};
 
       class _Dfs_ecma_mixin
       {
@@ -476,11 +435,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	_Captures _M_result;
       };
 
+      template<typename _Executer, typename _Traits, bool __is_ecma>
+	class _Regex_runner;
+
       template<typename _Traits, bool __is_ecma>
 	class _Dfs_executer : private std::conditional<__is_ecma, _Dfs_ecma_mixin, _Dfs_posix_mixin>::type
 	{
 	private:
-	  using _Runner = _Regex_runner<_Dfs_executer>;
+	  using _Runner = _Regex_runner<_Dfs_executer, _Traits, __is_ecma>;
 
 	public:
 	  bool
@@ -515,7 +477,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	class _Bfs_executer
 	{
 	private:
-	  using _Runner = _Regex_runner<_Bfs_executer>;
+	  using _Runner = _Regex_runner<_Bfs_executer, _Traits, __is_ecma>;
 
 	public:
 	  bool
@@ -554,20 +516,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  bool _M_found;
 	};
 
-      template<template<typename, bool> class _Executer_tmpl, typename _Traits, bool __is_ecma>
-	class _Regex_runner<_Executer_tmpl<_Traits, __is_ecma>>
+      template<typename _Executer, typename _Traits, bool __is_ecma>
+	class _Regex_runner
 	{
-	private:
-	  using _Executer = _Executer_tmpl<_Traits, __is_ecma>;
-
 	public:
+	  static constexpr bool _S_is_ecma = __is_ecma;
+
 	  _Regex_runner(_Dynamic_stack& __dynamic_stack) : _M_stack(__dynamic_stack) { }
 
 	  void
 	  _M_init(_Bi_iter __begin, _Bi_iter __end, const _NFA<_Traits>& __nfa,
 		  regex_constants::match_flag_type __flags,
-		  _Regex_search_mode __search_mode)
-	  { _M_context._M_init(__begin, __end, __nfa, __flags, __search_mode); }
+		  _Regex_search_mode __search_mode);
 
 	  template<typename _Bp, typename _Alloc>
 	    bool
@@ -580,16 +540,38 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  bool
 	  _M_search_from_first_helper(_StateIdT __start, _Captures& __result)
 	  {
-	    _M_context._M_reset();
-	    return _M_executer._M_search_from_first(*this, __start, _M_context._M_nfa->_M_sub_count(), __result);
+	    _M_current = _M_begin;
+	    return _M_executer._M_search_from_first(*this, __start, _M_nfa->_M_sub_count(), __result);
 	  }
 
 	  void
 	  _M_dfs(_Match_head& __head);
 
+	  const _Traits&
+	  _M_traits() const
+	  { return _M_nfa->_M_traits; }
+
+	  const _State<_Traits>&
+	  _M_get_state(_StateIdT __state_id) const
+	  { return (*_M_nfa)[__state_id]; }
+
+	  bool
+	  _M_is_word(_Char __ch) const;
+
+	  bool
+	  _M_word_boundary() const;
+
+	  bool
+	  _M_match_backref(unsigned int __index, _Match_head& __head, _Bi_iter& __current);
+
 	  _Stack_handlers _M_stack;
-	  _Context<_Traits> _M_context;
 	  _Executer _M_executer;
+	  _Bi_iter _M_begin;
+	  _Bi_iter _M_end;
+	  _Bi_iter _M_current;
+	  const _NFA<_Traits>* _M_nfa;
+	  regex_constants::match_flag_type _M_flags;
+	  _Regex_search_mode _M_search_mode;
 
 	  friend class _Stack_handlers;
 	  template<typename, bool> friend class _Dfs_executer;
