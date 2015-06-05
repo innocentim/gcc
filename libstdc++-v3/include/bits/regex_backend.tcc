@@ -23,7 +23,7 @@
 // <http://www.gnu.org/licenses/>.
 
 /**
- *  @file bits/regex_executer.tcc
+ *  @file bits/regex_backend.tcc
  *  This is an internal header file, included by other library headers.
  *  Do not attempt to use it directly. @headername{regex}
  */

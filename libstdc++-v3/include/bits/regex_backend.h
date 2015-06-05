@@ -23,7 +23,7 @@
 // <http://www.gnu.org/licenses/>.
 
 /**
- *  @file bits/regex_executer.h
+ *  @file bits/regex_backend.h
  *  This is an internal header file, included by other library headers.
  *  Do not attempt to use it directly. @headername{regex}
  */
@@ -592,4 +592,4 @@ _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace __detail
 } // namespace std
 
-#include <bits/regex_executer.tcc>
+#include <bits/regex_backend.tcc>
