@@ -73,6 +73,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __p->second;
     }
 
+  inline void
+  _Dynamic_stack::_M_jump(void* __old_top) noexcept
+  {
+    while (!(_M_blocks.front()._M_data <= __old_top
+	     && (__old_top < std::end(_M_blocks.front()._M_data)
+		 || __old_top == _M_base)))
+      _M_blocks.pop_front();
+    _M_top_frame() = __old_top;
+  }
+
   template<size_t __size>
     size_t
     _Dynamic_stack::_M_allocate()
@@ -93,6 +103,33 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	&& _M_top() != _M_base)
       _M_blocks.pop_front();
   }
+
+  inline void*&
+  _Dynamic_stack::_M_top_frame() noexcept
+  {
+    auto __top = _M_blocks.front()._M_top;
+    _GLIBCXX_DEBUG_ASSERT(_M_blocks.front()._M_data <= __top && __top <= std::end(_M_blocks.front()._M_data));
+    return _M_blocks.front()._M_top;
+  }
+
+  template<typename _Bi_iter>
+    bool
+    _Regex_run<_Bi_iter>::_Capture::operator<(const _Capture& __rhs) const
+    {
+      _GLIBCXX_DEBUG_ASSERT((_M_state == _S_only_left)
+			    == (__rhs._M_state == _S_only_left));
+      if (_M_state == _S_none)
+	return false;
+      if (__rhs._M_state == _S_none)
+	return true;
+      if (_M_state == _S_only_left)
+	return _M_left < __rhs._M_left;
+      if (_M_left < __rhs._M_left)
+	return true;
+      if (_M_left > __rhs._M_left)
+	return false;
+      return _M_right > __rhs._M_right;
+    }
 
   template<typename _Bi_iter>
   template<template<typename, bool> class _Executer_tmpl, typename _Traits, bool __is_ecma>
@@ -166,115 +203,39 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     { __runner._M_executer._M_set_last(__save._M_last); }
 
   template<typename _Bi_iter>
-  template<template<typename, bool> class _Executer_tmpl, typename _Traits, bool __is_ecma>
     void
-    _Regex_run<_Bi_iter>::_Regex_runner<_Executer_tmpl<_Traits, __is_ecma>>::
-    _M_dfs(_Regex_context& __context)
+    _Regex_run<_Bi_iter>::_Regex_stack::_M_cleanup(void* __old_top) noexcept
     {
-#define __TAIL_RECURSE(__new_state) { __context._M_state = (__new_state); continue; }
-      while (1)
-	{
-	  if (_M_executer._M_visited(__context._M_state, __context))
-	    return;
-	  const auto& __state = _M_exec_context._M_get_state(__context._M_state);
-	  const auto& __current = _M_exec_context._M_current;
-	  switch (__state._M_opcode)
+      if (is_trivially_destructible<_Bi_iter>::value)
+	_M_stack._M_jump(__old_top);
+      else
+	while (_M_stack._M_top() != __old_top)
+	  switch (_M_stack._M_top_item<_Tag>()._M_tag)
 	    {
-	    case _S_opcode_repeat:
-	      if (_M_executer._M_handle_repeat(*this, __state, __context))
-		continue;
-	      break;
-	    case _S_opcode_alternative:
-	      _M_stack.template _M_push<typename _Regex_stack::_Saved_state>(__state._M_next);
-	      __TAIL_RECURSE(__state._M_alt)
-	      break;
-	    case _S_opcode_subexpr_begin:
-	      {
-		auto& __paren = __context._M_parens[__state._M_subexpr];
-		_M_stack.template _M_push<typename _Regex_stack::_Saved_paren>(__state._M_subexpr, __paren);
-		__paren._M_set_left(__current);
-		__TAIL_RECURSE(__state._M_next)
-		break;
-	      }
-	    case _S_opcode_subexpr_end:
-	      {
-		auto& __paren = __context._M_parens[__state._M_subexpr];
-		_M_stack.template _M_push<typename _Regex_stack::_Saved_paren>(__state._M_subexpr, __paren);
-		__paren._M_set_right(__current);
-		__TAIL_RECURSE(__state._M_next)
-	      }
-	      break;
-	    case _S_opcode_line_begin_assertion:
-	      if (_M_exec_context._M_at_begin()
-		  && !(_M_exec_context._M_flags & (regex_constants::match_not_bol
-						   | regex_constants::match_prev_avail)))
-		__TAIL_RECURSE(__state._M_next)
-	      break;
-	    case _S_opcode_line_end_assertion:
-	      if (_M_exec_context._M_at_end()
-		  && !(_M_exec_context._M_flags & regex_constants::match_not_eol))
-		__TAIL_RECURSE(__state._M_next)
-	      break;
-	    case _S_opcode_word_boundary:
-	      if (_M_exec_context._M_word_boundary() == !__state._M_neg)
-		__TAIL_RECURSE(__state._M_next)
-	      break;
-	    case _S_opcode_subexpr_lookahead:
-	      {
-		_Regex_runner __runner(_M_stack._M_stack);
-		__runner._M_init(__current, _M_exec_context._M_end,
-				 *_M_exec_context._M_nfa, _M_exec_context._M_flags,
-				 _M_exec_context._M_search_mode);
-		_Captures __captures;
-		bool __ret = __runner._M_match_impl(__state._M_alt, __context._M_parens.size(), __captures);
-		if (__ret != __state._M_neg)
-		  {
-		    if (__ret)
-		      {
-			auto& __res = __context._M_parens;
-			_GLIBCXX_DEBUG_ASSERT(__res.size() == __captures.size());
-			for (size_t __i = 0; __i < __captures.size(); __i++)
-			  if (__captures[__i]._M_matched())
-			    {
-			      _M_stack.template _M_push<typename _Regex_stack::_Saved_paren>(__i, __res[__i]);
-			      __res[__i] = __captures[__i];
-			    }
-		      }
-		    __TAIL_RECURSE(__state._M_next)
-		  }
-	      }
-	      break;
-	    case _S_opcode_match:
-	      if (_M_exec_context._M_at_end())
-		break;
-	      if (_M_executer._M_handle_match(*this, __state, __context))
-		continue;
-	      break;
-	    case _S_opcode_backref:
-	      if (_M_executer._M_handle_backref(*this, __state, __context))
-		continue;
-	      break;
-	    case _S_opcode_accept:
-	      if (!__context._M_found)
-		{
-		  if (_M_exec_context._M_search_mode == _Regex_search_mode::_Exact)
-		    __context._M_found = _M_exec_context._M_at_end();
-		  else
-		    __context._M_found = true;
-		  if (_M_exec_context._M_flags & regex_constants::match_not_null)
-		    __context._M_found = __context._M_found && !_M_exec_context._M_at_begin();
-		}
-	      if (__context._M_found)
-		_M_executer._M_handle_accept(__context._M_parens);
-	      break;
-	    case _S_opcode_unknown:
-	    case _S_opcode_dummy:
-	      _GLIBCXX_DEBUG_ASSERT(false);
-	      break;
-	    }
-	  break;
-	}
-#undef __TAIL_RECURSE
+	    case _Tag::_S_Saved_state:
+	      _M_stack._M_pop<_Saved_state>(); break;
+	    case _Tag::_S_Saved_paren:
+	      _M_stack._M_pop<_Saved_paren>(); break;
+	    case _Tag::_S_Saved_position:
+	      _M_stack._M_pop<_Saved_position>(); break;
+	    case _Tag::_S_Saved_last:
+	      _M_stack._M_pop<_Saved_last>(); break;
+	    };
+    }
+
+  template<typename _Bi_iter>
+  template<typename _Traits>
+    void
+    _Regex_run<_Bi_iter>::_Executer_context<_Traits>::
+    _M_init(_Bi_iter __begin, _Bi_iter __end, const _NFA<_Traits>& __nfa,
+	    regex_constants::match_flag_type __flags,
+	    _Regex_search_mode __search_mode)
+    {
+      _M_begin = __begin;
+      _M_end = __end;
+      _M_flags = __flags;
+      _M_nfa = &__nfa;
+      _M_search_mode = __search_mode;
     }
 
   template<typename _Bi_iter>
@@ -286,18 +247,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return _M_traits().isctype
 	(__ch, _M_traits().lookup_classname(__s, __s+1));
     }
-
-  template<typename _Bi_iter>
-  template<typename _Traits>
-    bool
-    _Regex_run<_Bi_iter>::_Executer_context<_Traits>::_M_at_begin() const
-    { return _M_current == _M_begin; }
-
-  template<typename _Bi_iter>
-  template<typename _Traits>
-    bool
-    _Regex_run<_Bi_iter>::_Executer_context<_Traits>::_M_at_end() const
-    { return _M_current == _M_end; }
 
   template<typename _Bi_iter>
   template<typename _Traits>
@@ -351,6 +300,371 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	__output = __current;
       else
 	_M_current = __current;
+      return __ret;
+    }
+
+  template<typename _Bi_iter>
+  template<typename _Traits, bool __is_ecma>
+    bool
+    _Regex_run<_Bi_iter>::_Dfs_executer<_Traits, __is_ecma>::
+    _M_search_from_first(_Runner& __runner, _StateIdT __start, size_t __size, _Captures& __result)
+    {
+      _M_last.first = 0;
+      this->_M_reset(__start, __size);
+      __runner._M_stack._M_exec(this->_M_get_context(), __runner);
+      if (this->_M_get_context()._M_found)
+	{
+	  this->_M_get_result(__result);
+	  return true;
+	}
+      return false;
+    }
+
+  template<typename _Bi_iter>
+  template<typename _Traits, bool __is_ecma>
+    bool
+    _Regex_run<_Bi_iter>::_Dfs_executer<_Traits, __is_ecma>::
+    _M_handle_repeat(_Runner& __runner, const _State<_Traits>& __state, _Regex_context& __context)
+    {
+      const auto& __current = __runner._M_exec_context._M_current;
+      if (_M_last.first == 2 && _M_last.second == __current)
+	return false;
+
+      _StateIdT __first = __state._M_alt, __second = __state._M_next;
+      if (__state._M_neg)
+	swap(__first, __second);
+      __runner._M_stack.template _M_push<typename _Regex_stack::_Saved_state>(__second);
+      __runner._M_stack.template _M_push<typename _Regex_stack::_Saved_last>(_M_last);
+      if (_M_last.first == 0 || _M_last.second != __current)
+	{
+	  _M_last.first = 0;
+	  _M_last.second = __current;
+	}
+      _M_last.first++;
+
+      __context._M_state = __first;
+      return true;
+    }
+
+  template<typename _Bi_iter>
+  template<typename _Traits, bool __is_ecma>
+    bool
+    _Regex_run<_Bi_iter>::_Dfs_executer<_Traits, __is_ecma>::
+    _M_handle_match(_Runner& __runner, const _State<_Traits>& __state, _Regex_context& __context)
+    {
+      if (__state._M_matches(*__runner._M_exec_context._M_current))
+	{
+	  __runner._M_stack.template _M_push<typename _Regex_stack::_Saved_position>(__runner._M_exec_context._M_current);
+	  ++__runner._M_exec_context._M_current;
+	  __context._M_state = __state._M_next;
+	  return true;
+	}
+      return false;
+    }
+
+  template<typename _Bi_iter>
+  template<typename _Traits, bool __is_ecma>
+    bool
+    _Regex_run<_Bi_iter>::_Dfs_executer<_Traits, __is_ecma>::
+    _M_handle_backref(_Runner& __runner, const _State<_Traits>& __state, _Regex_context& __context)
+    {
+      _Bi_iter __current;
+      if (__runner._M_exec_context._M_match_backref(__state._M_backref_index, __context, __current))
+	{
+	  __runner._M_stack.template _M_push<typename _Regex_stack::_Saved_position>(std::move(__current));
+	  __context._M_state = __state._M_next;
+	  return true;
+	}
+      return false;
+    }
+
+  template<typename _Bi_iter>
+  template<typename _Traits, bool __is_ecma>
+    bool
+    _Regex_run<_Bi_iter>::_Bfs_executer<_Traits, __is_ecma>::
+    _M_visited(_StateIdT __state_id, _Regex_context& __context)
+    {
+      if (_M_is_visited[__state_id])
+	{
+	  if (__is_ecma)
+	    return true;
+	  if (!_M_leftmost_longest(__context._M_parens, _M_current_positions[__state_id]))
+	    return true;
+	}
+      _M_is_visited[__state_id] = true;
+      if (!__is_ecma)
+	_M_current_positions[__state_id] = __context._M_parens;
+      return false;
+    }
+
+  template<typename _Bi_iter>
+  template<typename _Traits, bool __is_ecma>
+    bool
+    _Regex_run<_Bi_iter>::_Bfs_executer<_Traits, __is_ecma>::
+    _M_search_from_first(_Runner& __runner, _StateIdT __start, size_t __size, _Captures& __result)
+    {
+      _M_is_visited.resize(__runner._M_exec_context._M_nfa->size());
+      _M_current_positions.resize(__runner._M_exec_context._M_nfa->size());
+      _M_contexts.clear();
+      _M_contexts.emplace_back(__start, __size);
+      if (_M_search_from_first_impl(__runner))
+	{
+	  __result = std::move(_M_result);
+	  return true;
+	}
+      return false;
+    }
+
+  template<typename _Bi_iter>
+  template<typename _Traits, bool __is_ecma>
+    bool
+    _Regex_run<_Bi_iter>::_Bfs_executer<_Traits, __is_ecma>::
+    _M_search_from_first_impl(_Runner& __runner)
+    {
+      bool __found = false;
+      while (!_M_contexts.empty())
+	{
+	  _M_found = false;
+	  std::fill_n(_M_is_visited.begin(), _M_is_visited.size(), false);
+	  auto __contexts = std::move(_M_contexts);
+	  for (auto& __context : __contexts)
+	    __runner._M_stack._M_exec(__context, __runner);
+	  __found = __found || _M_found;
+	  if (__runner._M_exec_context._M_current != __runner._M_exec_context._M_end)
+	    ++__runner._M_exec_context._M_current;
+	}
+      return __found;
+    }
+
+  template<typename _Bi_iter>
+  template<typename _Traits, bool __is_ecma>
+    bool
+    _Regex_run<_Bi_iter>::_Bfs_executer<_Traits, __is_ecma>::
+    _M_handle_repeat(_Runner& __runner, const _State<_Traits>& __state, _Regex_context& __context)
+    {
+      _StateIdT __first = __state._M_alt, __second = __state._M_next;
+      if (__state._M_neg)
+	swap(__first, __second);
+      __runner._M_stack.template _M_push<typename _Regex_stack::_Saved_state>(__second);
+      __context._M_state = __first;
+      return true;
+    }
+
+  template<typename _Bi_iter>
+  template<typename _Traits, bool __is_ecma>
+    bool
+    _Regex_run<_Bi_iter>::_Bfs_executer<_Traits, __is_ecma>::
+    _M_handle_match(_Runner& __runner, const _State<_Traits>& __state, const _Regex_context& __context)
+    {
+      if (!__state._M_matches(*__runner._M_exec_context._M_current))
+	return false;
+      if (__is_ecma && _M_found)
+	return false;
+      _M_contexts.emplace_back(__context);
+      _M_contexts.back()._M_state = __state._M_next;
+      return false;
+    }
+
+  template<typename _Bi_iter>
+  template<typename _Traits, bool __is_ecma>
+    void
+    _Regex_run<_Bi_iter>::_Bfs_executer<_Traits, __is_ecma>::
+    _M_handle_accept(const _Captures& __captures)
+    {
+      _M_found = true;
+      if (__is_ecma || (_M_result.empty() || _M_leftmost_longest(__captures, _M_result)))
+	_M_result = __captures;
+    }
+
+  template<typename _Bi_iter>
+  template<template<typename, bool> class _Executer_tmpl, typename _Traits, bool __is_ecma>
+  template<typename _Bp, typename _Alloc>
+    bool
+    _Regex_run<_Bi_iter>::_Regex_runner<_Executer_tmpl<_Traits, __is_ecma>>::
+    _M_match(std::vector<sub_match<_Bp>, _Alloc>& __res)
+    {
+      _Captures __result;
+      if (_M_match_impl(_M_exec_context._M_nfa->_M_start(), _M_exec_context._M_nfa->_M_sub_count(), __result))
+	{
+	  _GLIBCXX_DEBUG_ASSERT(__res.size() >= __result.size());
+	  for (size_t __i = 0; __i < __result.size(); __i++)
+	    if ((__res[__i].matched = __result[__i]._M_matched()))
+	      {
+		__res[__i].first = __result[__i]._M_get_left();
+		__res[__i].second = __result[__i]._M_get_right();
+	      }
+	  return true;
+	}
+      return false;
+    }
+
+  template<typename _Bi_iter>
+  template<template<typename, bool> class _Executer_tmpl, typename _Traits, bool __is_ecma>
+    bool
+    _Regex_run<_Bi_iter>::_Regex_runner<_Executer_tmpl<_Traits, __is_ecma>>::
+    _M_match_impl(_StateIdT __start, size_t __size, _Captures& __result)
+    {
+      if (_M_exec_context._M_search_mode == _Regex_search_mode::_Exact)
+	return _M_search_from_first_helper(__start, __result);
+      if (_M_search_from_first_helper(__start, __result))
+	return true;
+      if (_M_exec_context._M_flags & regex_constants::match_continuous)
+	return false;
+      _M_exec_context._M_flags |= regex_constants::match_prev_avail;
+      while (_M_exec_context._M_begin != _M_exec_context._M_end)
+	{
+	  ++_M_exec_context._M_begin;
+	  if (_M_search_from_first_helper(__start, __result))
+	    return true;
+	}
+      return false;
+    }
+
+  template<typename _Bi_iter>
+  template<template<typename, bool> class _Executer_tmpl, typename _Traits, bool __is_ecma>
+    void
+    _Regex_run<_Bi_iter>::_Regex_runner<_Executer_tmpl<_Traits, __is_ecma>>::
+    _M_dfs(_Regex_context& __context)
+    {
+#define __TAIL_RECURSE(__new_state) { __context._M_state = (__new_state); continue; }
+      while (1)
+	{
+	  if (_M_executer._M_visited(__context._M_state, __context))
+	    return;
+	  const auto& __state = _M_exec_context._M_get_state(__context._M_state);
+	  const auto& __current = _M_exec_context._M_current;
+	  switch (__state._M_opcode)
+	    {
+	    case _S_opcode_repeat:
+	      if (_M_executer._M_handle_repeat(*this, __state, __context))
+		continue;
+	      break;
+	    case _S_opcode_alternative:
+	      _M_stack.template _M_push<typename _Regex_stack::_Saved_state>(__state._M_next);
+	      __TAIL_RECURSE(__state._M_alt)
+	      break;
+	    case _S_opcode_subexpr_begin:
+	      {
+		auto& __paren = __context._M_parens[__state._M_subexpr];
+		_M_stack.template _M_push<typename _Regex_stack::_Saved_paren>(__state._M_subexpr, __paren);
+		__paren._M_set_left(__current);
+		__TAIL_RECURSE(__state._M_next)
+		break;
+	      }
+	    case _S_opcode_subexpr_end:
+	      {
+		auto& __paren = __context._M_parens[__state._M_subexpr];
+		_M_stack.template _M_push<typename _Regex_stack::_Saved_paren>(__state._M_subexpr, __paren);
+		__paren._M_set_right(__current);
+		__TAIL_RECURSE(__state._M_next)
+	      }
+	      break;
+	    case _S_opcode_line_begin_assertion:
+	      if (__current == _M_exec_context._M_begin
+		  && !(_M_exec_context._M_flags & (regex_constants::match_not_bol
+						   | regex_constants::match_prev_avail)))
+		__TAIL_RECURSE(__state._M_next)
+	      break;
+	    case _S_opcode_line_end_assertion:
+	      if (__current == _M_exec_context._M_end
+		  && !(_M_exec_context._M_flags & regex_constants::match_not_eol))
+		__TAIL_RECURSE(__state._M_next)
+	      break;
+	    case _S_opcode_word_boundary:
+	      if (_M_exec_context._M_word_boundary() == !__state._M_neg)
+		__TAIL_RECURSE(__state._M_next)
+	      break;
+	    case _S_opcode_subexpr_lookahead:
+	      {
+		_Regex_runner __runner(__get_dynamic_stack());
+		__runner._M_init(__current, _M_exec_context._M_end,
+				 *_M_exec_context._M_nfa, _M_exec_context._M_flags,
+				 _M_exec_context._M_search_mode);
+		_Captures __captures;
+		bool __ret = __runner._M_match_impl(__state._M_alt, __context._M_parens.size(), __captures);
+		if (__ret != __state._M_neg)
+		  {
+		    if (__ret)
+		      {
+			auto& __res = __context._M_parens;
+			_GLIBCXX_DEBUG_ASSERT(__res.size() == __captures.size());
+			for (size_t __i = 0; __i < __captures.size(); __i++)
+			  if (__captures[__i]._M_matched())
+			    {
+			      _M_stack.template _M_push<typename _Regex_stack::_Saved_paren>(__i, __res[__i]);
+			      __res[__i] = __captures[__i];
+			    }
+		      }
+		    __TAIL_RECURSE(__state._M_next)
+		  }
+	      }
+	      break;
+	    case _S_opcode_match:
+	      if (_M_exec_context._M_end == __current)
+		break;
+	      if (_M_executer._M_handle_match(*this, __state, __context))
+		continue;
+	      break;
+	    case _S_opcode_backref:
+	      if (_M_executer._M_handle_backref(*this, __state, __context))
+		continue;
+	      break;
+	    case _S_opcode_accept:
+	      if (!__context._M_found)
+		{
+		  if (_M_exec_context._M_search_mode == _Regex_search_mode::_Exact)
+		    __context._M_found = _M_exec_context._M_end == __current;
+		  else
+		    __context._M_found = true;
+		  if (_M_exec_context._M_flags & regex_constants::match_not_null)
+		    __context._M_found = __context._M_found && _M_exec_context._M_begin != __current;
+		}
+	      if (__context._M_found)
+		_M_executer._M_handle_accept(__context._M_parens);
+	      break;
+	    case _S_opcode_unknown:
+	    case _S_opcode_dummy:
+	      _GLIBCXX_DEBUG_ASSERT(false);
+	      break;
+	    }
+	  break;
+	}
+#undef __TAIL_RECURSE
+    }
+
+  template<typename _Bi_iter>
+  template<_RegexExecutorPolicy __policy, typename _Bp, typename _Alloc, typename _Traits>
+    bool
+    _Regex_run<_Bi_iter>::__run(_Bi_iter __s, _Bi_iter __e,
+				std::vector<sub_match<_Bp>, _Alloc>& __res,
+				const _NFA<_Traits>& __nfa,
+				regex_constants::match_flag_type __flags,
+				_Regex_search_mode __search_mode)
+    {
+      bool __use_bfs =
+	(__nfa._M_options() & regex_constants::__polynomial)
+	|| (__policy == _RegexExecutorPolicy::_S_alternate
+	    && !__nfa._M_has_backref);
+      bool __is_ecma = __nfa._M_options() & regex_constants::ECMAScript;
+      bool __ret;
+#define _RUN(_EXECUTER_TYPE, __IS_ECMA) \
+	do \
+	  { \
+	    _Regex_runner<_EXECUTER_TYPE<_Traits, __IS_ECMA>> __runner(__get_dynamic_stack()); \
+	    __runner._M_init(__s, __e, __nfa, __flags, __search_mode); \
+	    __ret = __runner._M_match(__res); \
+	  } \
+	while (false)
+      if (!__use_bfs && __is_ecma)
+	_RUN(_Dfs_executer, true);
+      else if (!__use_bfs && !__is_ecma)
+	_RUN(_Dfs_executer, false);
+      else if (__use_bfs && __is_ecma)
+	_RUN(_Bfs_executer, true);
+      else
+	_RUN(_Bfs_executer, false);
+#undef _RUN
+      _GLIBCXX_DEBUG_ASSERT(__get_dynamic_stack()._M_empty());
       return __ret;
     }
 
