@@ -204,6 +204,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       using _Char = typename iterator_traits<_Bi_iter>::value_type;
 
+      template<typename _Executer, typename _Traits, bool __is_ecma>
+	class _Context;
+
       class _Capture
       {
       private:
@@ -435,9 +438,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	_Captures _M_result;
       };
 
-      template<typename _Executer, typename _Traits, bool __is_ecma>
-	class _Context;
-
       template<typename _Traits, bool __is_ecma>
 	class _Dfs_executer : private std::conditional<__is_ecma, _Dfs_ecma_mixin, _Dfs_posix_mixin>::type
 	{
@@ -473,18 +473,59 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  std::pair<int, _Bi_iter> _M_last;
 	};
 
+      class _Bfs_ecma_mixin
+      {
+      public:
+	void
+	_M_reset(size_t __size)
+	{ _M_is_visited.resize(__size); }
+
+	void
+	_M_clear()
+	{ std::fill_n(_M_is_visited.begin(), _M_is_visited.size(), false); }
+
+	bool
+	_M_visited_impl(_StateIdT __state_id, _Match_head& __head);
+
+      private:
+	std::vector<bool> _M_is_visited;
+      };
+
+      class _Bfs_posix_mixin
+      {
+      public:
+	void
+	_M_reset(size_t __size)
+	{
+	  _M_is_visited.resize(__size);
+	  _M_current_positions.resize(__size);
+	}
+
+	void
+	_M_clear()
+	{ std::fill_n(_M_is_visited.begin(), _M_is_visited.size(), false); }
+
+	bool
+	_M_visited_impl(_StateIdT __state_id, _Match_head& __head);
+
+      private:
+	std::vector<bool> _M_is_visited;
+	std::vector<_Captures> _M_current_positions;
+      };
+
       template<typename _Traits, bool __is_ecma>
-	class _Bfs_executer
+	class _Bfs_executer : private std::conditional<__is_ecma, _Bfs_ecma_mixin, _Bfs_posix_mixin>::type
 	{
 	private:
 	  using _Context_t = _Context<_Bfs_executer, _Traits, __is_ecma>;
 
 	public:
 	  bool
-	  _M_visited(_StateIdT __state_id, _Match_head& __head);
+	  _M_search_from_first(_Context_t& __context, _StateIdT __start, size_t __size, _Captures& __result);
 
 	  bool
-	  _M_search_from_first(_Context_t& __context, _StateIdT __start, size_t __size, _Captures& __result);
+	  _M_visited(_StateIdT __state_id, _Match_head& __head)
+	  { return this->_M_visited_impl(__state_id, __head); }
 
 	  bool
 	  _M_handle_repeat(_Context_t& __context, const _State<_Traits>& __state, _Match_head& __head);
@@ -509,8 +550,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  bool
 	  _M_search_from_first_impl(_Context_t& __context);
 
-	  std::vector<bool> _M_is_visited;
-	  std::vector<_Captures> _M_current_positions;
 	  std::vector<_Match_head> _M_heads;
 	  _Captures _M_result;
 	  bool _M_found;

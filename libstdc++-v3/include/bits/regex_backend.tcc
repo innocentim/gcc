@@ -378,21 +378,26 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 
   template<typename _Bi_iter>
-  template<typename _Traits, bool __is_ecma>
     bool
-    _Regex_scope<_Bi_iter>::_Bfs_executer<_Traits, __is_ecma>::
-    _M_visited(_StateIdT __state_id, _Match_head& __head)
+    _Regex_scope<_Bi_iter>::_Bfs_ecma_mixin::
+    _M_visited_impl(_StateIdT __state_id, _Match_head& __head)
     {
       if (_M_is_visited[__state_id])
-	{
-	  if (__is_ecma)
-	    return true;
-	  if (!_M_leftmost_longest(__head._M_parens, _M_current_positions[__state_id]))
-	    return true;
-	}
+	return true;
       _M_is_visited[__state_id] = true;
-      if (!__is_ecma)
-	_M_current_positions[__state_id] = __head._M_parens;
+      return false;
+    }
+
+  template<typename _Bi_iter>
+    bool
+    _Regex_scope<_Bi_iter>::_Bfs_posix_mixin::
+    _M_visited_impl(_StateIdT __state_id, _Match_head& __head)
+    {
+      if (_M_is_visited[__state_id])
+	if (!_M_leftmost_longest(__head._M_parens, _M_current_positions[__state_id]))
+	  return true;
+      _M_is_visited[__state_id] = true;
+      _M_current_positions[__state_id] = __head._M_parens;
       return false;
     }
 
@@ -402,8 +407,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _Regex_scope<_Bi_iter>::_Bfs_executer<_Traits, __is_ecma>::
     _M_search_from_first(_Context_t& __context, _StateIdT __start, size_t __size, _Captures& __result)
     {
-      _M_is_visited.resize(__context._M_nfa->size());
-      _M_current_positions.resize(__context._M_nfa->size());
+      this->_M_reset(__context._M_nfa->size());
       _M_heads.clear();
       _M_heads.emplace_back(__start, __size);
       if (_M_search_from_first_impl(__context))
@@ -424,7 +428,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       while (!_M_heads.empty())
 	{
 	  _M_found = false;
-	  std::fill_n(_M_is_visited.begin(), _M_is_visited.size(), false);
+	  this->_M_clear();
 	  auto __heads = std::move(_M_heads);
 	  for (auto& __head : __heads)
 	    __context._M_stack._M_exec(__head, __context);
