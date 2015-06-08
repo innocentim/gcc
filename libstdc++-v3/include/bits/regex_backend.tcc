@@ -131,10 +131,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		      _M_stack._M_pop<_Type>();\
 		      _M_handle(__save, __context, __head);\
 		    }
-		case _Tag::_S_Saved_state: __HANDLE(_Saved_state); break;
-		case _Tag::_S_Saved_paren: __HANDLE(_Saved_paren); break;
-		case _Tag::_S_Saved_position: __HANDLE(_Saved_position); break;
-		case _Tag::_S_Saved_dfs_repeat_data: __HANDLE(_Saved_dfs_repeat_data); break;
+		case _Tag::_S_saved_state: __HANDLE(_Saved_state); break;
+		case _Tag::_S_saved_paren: __HANDLE(_Saved_paren); break;
+		case _Tag::_S_saved_position: __HANDLE(_Saved_position); break;
+		case _Tag::_S_saved_dfs_repeat: __HANDLE(_Saved_dfs_repeat); break;
 #undef __HANDLE
 		};
 	    }
@@ -156,14 +156,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	while (_M_stack._M_top() != __old_top)
 	  switch (_M_stack._M_top_item<_Tag>()._M_tag)
 	    {
-	    case _Tag::_S_Saved_state:
+	    case _Tag::_S_saved_state:
 	      _M_stack._M_pop<_Saved_state>(); break;
-	    case _Tag::_S_Saved_paren:
+	    case _Tag::_S_saved_paren:
 	      _M_stack._M_pop<_Saved_paren>(); break;
-	    case _Tag::_S_Saved_position:
+	    case _Tag::_S_saved_position:
 	      _M_stack._M_pop<_Saved_position>(); break;
-	    case _Tag::_S_Saved_dfs_repeat_data:
-	      _M_stack._M_pop<_Saved_dfs_repeat_data>(); break;
+	    case _Tag::_S_saved_dfs_repeat:
+	      _M_stack._M_pop<_Saved_dfs_repeat>(); break;
 	    };
     }
 
@@ -195,8 +195,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Context_t>
     void
     _Regex_scope<_Bi_iter>::_Stack_handlers::
-    _M_handle(const _Saved_dfs_repeat_data& __save, _Context_t& __context, _Match_head& __head)
-    { __context._M_executer._M_restore_dfs_repeat_data(__context, __save._M_last, __save._M_current); }
+    _M_handle(const _Saved_dfs_repeat& __save, _Context_t& __context, _Match_head& __head)
+    { __context._M_executer._M_restore_dfs_repeat(__context, __save._M_last, __save._M_current); }
 
   template<typename _Bi_iter>
   template<typename _Executer, typename _Traits, bool __is_ecma>
@@ -309,7 +309,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       if (__state._M_neg)
 	swap(__first, __second);
       __context._M_stack.template _M_push<typename _Stack_handlers::_Saved_state>(__second);
-      __context._M_stack.template _M_push<typename _Stack_handlers::_Saved_dfs_repeat_data>(_M_last, __current);
+      __context._M_stack.template _M_push<typename _Stack_handlers::_Saved_dfs_repeat>(_M_last, __current);
       if (_M_last.first == 0 || _M_last.second != __current)
 	{
 	  _M_last.first = 0;

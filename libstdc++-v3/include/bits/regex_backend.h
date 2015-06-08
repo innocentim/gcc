@@ -300,10 +300,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{
 	  enum _Type
 	    {
-	      _S_Saved_state,
-	      _S_Saved_paren,
-	      _S_Saved_position,
-	      _S_Saved_dfs_repeat_data,
+	      _S_saved_state,
+	      _S_saved_paren,
+	      _S_saved_position,
+	      _S_saved_dfs_repeat,
 	    };
 
 	  explicit
@@ -316,7 +316,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{
 	  explicit
 	  _Saved_state(_StateIdT __state)
-	  : _Tag(_Tag::_S_Saved_state), _M_state(__state) { }
+	  : _Tag(_Tag::_S_saved_state), _M_state(__state) { }
 
 	  _StateIdT _M_state;
 	};
@@ -325,7 +325,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{
 	  explicit
 	  _Saved_paren(unsigned int __index, _Capture __paren)
-	  : _Tag(_Tag::_S_Saved_paren), _M_index(__index), _M_paren(std::move(__paren)) { }
+	  : _Tag(_Tag::_S_saved_paren), _M_index(__index), _M_paren(std::move(__paren)) { }
 
 	  unsigned int _M_index;
 	  _Capture _M_paren;
@@ -335,16 +335,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{
 	  explicit
 	  _Saved_position(_Bi_iter __position)
-	  : _Tag(_Tag::_S_Saved_position), _M_position(std::move(__position)) { }
+	  : _Tag(_Tag::_S_saved_position), _M_position(std::move(__position)) { }
 
 	  _Bi_iter _M_position;
 	};
 
-	struct _Saved_dfs_repeat_data : public _Tag
+	struct _Saved_dfs_repeat : public _Tag
 	{
 	  explicit
-	  _Saved_dfs_repeat_data(const std::pair<int, _Bi_iter>& __last, const _Bi_iter& __current)
-	  : _Tag(_Tag::_S_Saved_dfs_repeat_data), _M_last(__last), _M_current(__current) { }
+	  _Saved_dfs_repeat(const std::pair<int, _Bi_iter>& __last, const _Bi_iter& __current)
+	  : _Tag(_Tag::_S_saved_dfs_repeat), _M_last(__last), _M_current(__current) { }
 
 	  std::pair<int, _Bi_iter> _M_last;
 	  _Bi_iter _M_current;
@@ -377,7 +377,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 	template<typename _Context_t>
 	  static void
-	  _M_handle(const _Saved_dfs_repeat_data& __save, _Context_t& __context, _Match_head& __head);
+	  _M_handle(const _Saved_dfs_repeat& __save, _Context_t& __context, _Match_head& __head);
 
 	void
 	_M_cleanup(void* __old_top) noexcept;
@@ -459,7 +459,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _M_handle_repeat(_Context_t& __context, const _State<_Traits>& __state, _Match_head& __head);
 
 	  void
-	  _M_restore_dfs_repeat_data(_Context_t& __context, const std::pair<int, _Bi_iter>& __last, const _Bi_iter __current)
+	  _M_restore_dfs_repeat(_Context_t& __context, const std::pair<int, _Bi_iter>& __last, const _Bi_iter __current)
 	  {
 	    _M_last = __last;
 	    __context._M_current = __current;
@@ -549,7 +549,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    return false;
 	  }
 
-	  _M_restore_dfs_repeat_data(_Context_t& __context, const std::pair<int, _Bi_iter>& __last, const _Bi_iter __current) { }
+	  _M_restore_dfs_repeat(_Context_t& __context, const std::pair<int, _Bi_iter>& __last, const _Bi_iter __current) { }
 
 	private:
 	  bool
