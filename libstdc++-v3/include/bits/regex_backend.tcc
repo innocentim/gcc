@@ -134,7 +134,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		case _Tag::_S_Saved_state: __HANDLE(_Saved_state); break;
 		case _Tag::_S_Saved_paren: __HANDLE(_Saved_paren); break;
 		case _Tag::_S_Saved_position: __HANDLE(_Saved_position); break;
-		case _Tag::_S_Saved_last: __HANDLE(_Saved_last); break;
+		case _Tag::_S_Saved_dfs_repeat_data: __HANDLE(_Saved_dfs_repeat_data); break;
 #undef __HANDLE
 		};
 	    }
@@ -162,8 +162,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	      _M_stack._M_pop<_Saved_paren>(); break;
 	    case _Tag::_S_Saved_position:
 	      _M_stack._M_pop<_Saved_position>(); break;
-	    case _Tag::_S_Saved_last:
-	      _M_stack._M_pop<_Saved_last>(); break;
+	    case _Tag::_S_Saved_dfs_repeat_data:
+	      _M_stack._M_pop<_Saved_dfs_repeat_data>(); break;
 	    };
     }
 
@@ -195,8 +195,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Context_t>
     void
     _Regex_scope<_Bi_iter>::_Stack_handlers::
-    _M_handle(const _Saved_last& __save, _Context_t& __context, _Match_head& __head)
-    { __context._M_executer._M_set_last(__save._M_last); }
+    _M_handle(const _Saved_dfs_repeat_data& __save, _Context_t& __context, _Match_head& __head)
+    { __context._M_executer._M_restore_dfs_repeat_data(__context, __save._M_last, __save._M_current); }
 
   template<typename _Bi_iter>
   template<typename _Executer, typename _Traits, bool __is_ecma>
@@ -248,33 +248,34 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Executer, typename _Traits, bool __is_ecma>
     bool
     _Regex_scope<_Bi_iter>::_Context<_Executer, _Traits, __is_ecma>::
-    _M_match_backref(unsigned int __index, _Match_head& __head, _Bi_iter& __output)
+    _M_match_backref(unsigned int __index, _Match_head& __head)
     {
       const auto& __capture = __head._M_parens[__index];
       if (!__capture._M_matched())
 	return false;
 
+      auto __new_current = _M_current;
       auto __start = __capture._M_get_left();
       auto __end = __capture._M_get_right();
       bool __ret = [&]
 	{
 	  for (auto __len = std::distance(__start, __end); __len > 0; __len--)
 	    {
-	      if (_M_current == _M_end)
+	      if (__new_current == _M_end)
 		return false;
-	      ++_M_current;
+	      ++__new_current;
 	    }
-
-	  if (_M_flags & regex_constants::collate)
+	  if (_M_nfa->_M_options() & regex_constants::collate)
 	    return _M_traits().transform(__start, __end)
-	      == _M_traits().transform(_M_current, _M_current);
+	      == _M_traits().transform(_M_current, __new_current);
 	  return std::equal(__start, __end, _M_current);
 	}();
       if (__ret)
-	__output = _M_current;
-      else
-	_M_current = _M_current;
-      return __ret;
+	{
+	  _M_current = __new_current;
+	  return true;
+	}
+      return false;
     }
 
   template<typename _Bi_iter>
@@ -308,7 +309,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       if (__state._M_neg)
 	swap(__first, __second);
       __context._M_stack.template _M_push<typename _Stack_handlers::_Saved_state>(__second);
-      __context._M_stack.template _M_push<typename _Stack_handlers::_Saved_last>(_M_last);
+      __context._M_stack.template _M_push<typename _Stack_handlers::_Saved_dfs_repeat_data>(_M_last, __current);
       if (_M_last.first == 0 || _M_last.second != __current)
 	{
 	  _M_last.first = 0;
@@ -328,7 +329,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       if (__state._M_matches(*__context._M_current))
 	{
-	  __context._M_stack.template _M_push<typename _Stack_handlers::_Saved_position>(__context._M_current);
 	  ++__context._M_current;
 	  __head._M_state = __state._M_next;
 	  return true;
@@ -342,10 +342,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _Regex_scope<_Bi_iter>::_Dfs_executer<_Traits, __is_ecma>::
     _M_handle_backref(_Context_t& __context, const _State<_Traits>& __state, _Match_head& __head)
     {
-      _Bi_iter __current;
-      if (__context._M_match_backref(__state._M_backref_index, __head, __current))
+      if (__context._M_match_backref(__state._M_backref_index, __head))
 	{
-	  __context._M_stack.template _M_push<typename _Stack_handlers::_Saved_position>(std::move(__current));
 	  __head._M_state = __state._M_next;
 	  return true;
 	}
@@ -518,6 +516,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	      break;
 	    case _S_opcode_alternative:
 	      _M_stack.template _M_push<typename _Stack_handlers::_Saved_state>(__state._M_next);
+	      _M_stack.template _M_push<typename _Stack_handlers::_Saved_position>(_M_current);
 	      __TAIL_RECURSE(__state._M_alt)
 	      break;
 	    case _S_opcode_subexpr_begin:

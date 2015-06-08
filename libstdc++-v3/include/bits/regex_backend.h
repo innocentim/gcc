@@ -303,7 +303,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	      _S_Saved_state,
 	      _S_Saved_paren,
 	      _S_Saved_position,
-	      _S_Saved_last,
+	      _S_Saved_dfs_repeat_data,
 	    };
 
 	  explicit
@@ -340,13 +340,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _Bi_iter _M_position;
 	};
 
-	struct _Saved_last : public _Tag
+	struct _Saved_dfs_repeat_data : public _Tag
 	{
 	  explicit
-	  _Saved_last(const std::pair<int, _Bi_iter>& __last)
-	  : _Tag(_Tag::_S_Saved_last), _M_last(__last) { }
+	  _Saved_dfs_repeat_data(const std::pair<int, _Bi_iter>& __last, const _Bi_iter& __current)
+	  : _Tag(_Tag::_S_Saved_dfs_repeat_data), _M_last(__last), _M_current(__current) { }
 
 	  std::pair<int, _Bi_iter> _M_last;
+	  _Bi_iter _M_current;
 	};
 
 	explicit
@@ -376,7 +377,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 	template<typename _Context_t>
 	  static void
-	  _M_handle(const _Saved_last& __save, _Context_t& __context, _Match_head& __head);
+	  _M_handle(const _Saved_dfs_repeat_data& __save, _Context_t& __context, _Match_head& __head);
 
 	void
 	_M_cleanup(void* __old_top) noexcept;
@@ -458,8 +459,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _M_handle_repeat(_Context_t& __context, const _State<_Traits>& __state, _Match_head& __head);
 
 	  void
-	  _M_set_last(const std::pair<int, _Bi_iter>& __last)
-	  { _M_last = __last; }
+	  _M_restore_dfs_repeat_data(_Context_t& __context, const std::pair<int, _Bi_iter>& __last, const _Bi_iter __current)
+	  {
+	    _M_last = __last;
+	    __context._M_current = __current;
+	  }
 
 	  bool
 	  _M_handle_match(_Context_t& __context, const _State<_Traits>& __state, _Match_head& __head);
@@ -545,8 +549,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    return false;
 	  }
 
-	  void
-	  _M_set_last(const std::pair<int, _Bi_iter>& __last) { }
+	  _M_restore_dfs_repeat_data(_Context_t& __context, const std::pair<int, _Bi_iter>& __last, const _Bi_iter __current) { }
 
 	private:
 	  bool
@@ -603,7 +606,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _M_word_boundary() const;
 
 	  bool
-	  _M_match_backref(unsigned int __index, _Match_head& __head, _Bi_iter& __current);
+	  _M_match_backref(unsigned int __index, _Match_head& __head);
 
 	  _Bi_iter _M_begin;
 	  _Bi_iter _M_end;
