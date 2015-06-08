@@ -513,11 +513,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	      if (_M_executer._M_handle_repeat(*this, __state, __head))
 		continue;
 	      break;
-	    case _S_opcode_alternative:
-	      _M_stack.template _M_push<_Saved_state>(__state._M_next);
-	      _M_stack.template _M_push<_Saved_position>(_M_current);
-	      __TAIL_RECURSE(__state._M_alt)
-	      break;
 	    case _S_opcode_subexpr_begin:
 	      {
 		auto& __paren = __head._M_parens[__state._M_subexpr];
@@ -534,10 +529,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		__TAIL_RECURSE(__state._M_next)
 	      }
 	      break;
+	    case _S_opcode_alternative:
+	      _M_stack.template _M_push<_Saved_state>(__state._M_next);
+	      _M_stack.template _M_push<_Saved_position>(_M_current);
+	      __TAIL_RECURSE(__state._M_alt)
+	      break;
 	    case _S_opcode_line_begin_assertion:
 	      if (_M_current == _M_begin
 		  && !(_M_flags & (regex_constants::match_not_bol
-						   | regex_constants::match_prev_avail)))
+				   | regex_constants::match_prev_avail)))
 		__TAIL_RECURSE(__state._M_next)
 	      break;
 	    case _S_opcode_line_end_assertion:
