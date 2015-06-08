@@ -55,7 +55,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   class _Dynamic_stack
   {
   public:
-    _Dynamic_stack() : _M_blocks(1), _M_base(_M_top()) { }
+    _Dynamic_stack() : _M_blocks(1), _M_base(_M_end()), _M_top_ptr(_M_end()) { }
 
     template<typename _Tp>
       void
@@ -67,11 +67,19 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
     template<typename _Tp>
       _Tp&
-      _M_top_item();
+      _M_top_item()
+      {
+	_GLIBCXX_DEBUG_ASSERT(_M_in_current_block(_M_top_ptr));
+	using _Elem = std::pair<void*, _Tp>;
+	return reinterpret_cast<_Elem*>(_M_top_ptr)->second;
+      }
 
     void*
     _M_top() const noexcept
-    { return _M_blocks.front()._M_top; }
+    {
+      _GLIBCXX_DEBUG_ASSERT(_M_in_current_block(_M_top_ptr));
+      return _M_top_ptr;
+    }
 
     void
     _M_jump(void* __old_top) noexcept;
@@ -82,35 +90,29 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     { return _M_top() == _M_base; }
 #endif
 
+    bool
+    _M_in_current_block(void* __top) const noexcept
+    { return _M_begin() <= __top && (__top < _M_end() || __top == _M_base); }
+
   private:
     struct _Block
-    {
-      _Block() : _M_top(std::end(_M_data)) { }
+    { char _M_data[_GLIBCXX_REGEX_STACK_BLOCK_SIZE]; };
 
-      size_t
-      _M_avail() const
-      { return static_cast<char*>(_M_top) - _M_data; }
+    size_t
+    _M_avail() const noexcept
+    { return reinterpret_cast<const char*>(_M_top_ptr) - reinterpret_cast<const char*>(_M_blocks.front()._M_data); }
 
-      char _M_data[_GLIBCXX_REGEX_STACK_BLOCK_SIZE];
-      void* _M_top;
-    };
+    void*
+    _M_begin() const noexcept
+    { return const_cast<void*>(reinterpret_cast<const void*> (_M_blocks.front()._M_data)); }
 
-    template<typename _Tp>
-      static constexpr size_t _S_sizeof()
-      { return ((sizeof(_Tp) - 1) & (~7)) + 8; }
-
-    template<size_t __size>
-      size_t
-      _M_allocate();
-
-    void
-    _M_deallocate(size_t __size) noexcept;
-
-    void*&
-    _M_top_frame() noexcept;
+    void*
+    _M_end() const noexcept
+    { return const_cast<void*>(reinterpret_cast<const void*>(std::end(_M_blocks.front()._M_data))); }
 
     std::forward_list<_Block> _M_blocks;
     void* _M_base;
+    void* _M_top_ptr;
   };
 
   inline _Dynamic_stack&

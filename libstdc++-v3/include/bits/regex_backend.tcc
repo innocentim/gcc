@@ -38,78 +38,53 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     void
     _Dynamic_stack::_M_push(_Tp&& __val)
     {
-      using _Elem = pair<size_t, _Tp>;
-      static_assert(sizeof(_Elem) <= _GLIBCXX_REGEX_STACK_BLOCK_SIZE,
-		    "sizeof(_Elem) is too large");
-      auto __allocated = _M_allocate<sizeof(_Elem)>();
+      _GLIBCXX_DEBUG_ASSERT(_M_in_current_block(_M_top_ptr));
+      using _Elem = std::pair<void*, _Tp>;
+      static_assert(sizeof(_Elem) < _GLIBCXX_REGEX_STACK_BLOCK_SIZE, "Iterator size is too large");
+      bool __need_push = sizeof(_Elem) > _M_avail();
+      _Elem* __new_top = reinterpret_cast<_Elem*>(__need_push ? (_M_blocks.emplace_front(), _M_end()) : _M_top_ptr) - 1;
+      _GLIBCXX_DEBUG_ASSERT(sizeof(_Elem) <= _M_avail());
       __try
 	{
-	  new (_M_top_frame()) _Elem(__allocated, std::forward<_Tp>(__val));
+	  new (__new_top) _Elem(_M_top_ptr, std::forward<_Tp>(__val));
 	}
       __catch(...)
 	{
-	  _M_deallocate(__allocated);
+	  if (__need_push)
+	    _M_blocks.pop_front();
 	  __throw_exception_again;
 	}
+      _M_top_ptr = __new_top;
+      _GLIBCXX_DEBUG_ASSERT(_M_in_current_block(_M_top_ptr));
     }
 
   template<typename _Tp>
     void
     _Dynamic_stack::_M_pop() noexcept
     {
-      using _Elem = pair<size_t, _Tp>;
-      auto __p = static_cast<_Elem*>(_M_top_frame());
-      auto __allocated = __p->first;
-      __p->second.~_Tp();
-      _M_deallocate(__allocated);
-    }
-
-  template<typename _Tp>
-    _Tp&
-    _Dynamic_stack::_M_top_item()
-    {
-      using _Elem = pair<size_t, _Tp>;
-      auto __p = static_cast<_Elem*>(_M_top_frame());
-      return __p->second;
+      _GLIBCXX_DEBUG_ASSERT(_M_in_current_block(_M_top_ptr));
+      using _Elem = std::pair<void*, _Tp>;
+      auto __elem = reinterpret_cast<_Elem*>(_M_top_ptr);
+      if (__elem + 1 >= _M_end() && _M_base != _M_end())
+	{
+	  _M_top_ptr = __elem->first;
+	  __elem->~_Elem();
+	  _M_blocks.pop_front();
+	}
+      else
+	{
+	  _M_top_ptr = __elem->first;
+	  __elem->~_Elem();
+	}
+      _GLIBCXX_DEBUG_ASSERT(_M_in_current_block(_M_top_ptr));
     }
 
   inline void
   _Dynamic_stack::_M_jump(void* __old_top) noexcept
   {
-    while (!(_M_blocks.front()._M_data <= __old_top
-	     && (__old_top < std::end(_M_blocks.front()._M_data)
-		 || __old_top == _M_base)))
+    while (!_M_in_current_block(__old_top))
       _M_blocks.pop_front();
-    _M_top_frame() = __old_top;
-  }
-
-  template<size_t __size>
-    size_t
-    _Dynamic_stack::_M_allocate()
-    {
-      if (_M_blocks.front()._M_avail() < __size)
-	_M_blocks.emplace_front();
-      _M_blocks.front()._M_top =
-	static_cast<void*>(static_cast<char*>(_M_top_frame()) - __size);
-      return __size;
-    }
-
-  inline void
-  _Dynamic_stack::_M_deallocate(size_t __size) noexcept
-  {
-    _M_blocks.front()._M_top =
-      static_cast<void*>(static_cast<char*>(_M_top_frame()) + __size);
-    if (_M_blocks.front()._M_avail() >= _GLIBCXX_REGEX_STACK_BLOCK_SIZE
-	&& _M_top() != _M_base)
-      _M_blocks.pop_front();
-  }
-
-  inline void*&
-  _Dynamic_stack::_M_top_frame() noexcept
-  {
-    auto __top = _M_blocks.front()._M_top;
-    _GLIBCXX_DEBUG_ASSERT(_M_blocks.front()._M_data <= __top && __top <= std::end(_M_blocks.front()._M_data));
-    return _M_blocks.front()._M_top;
+    _M_top_ptr = __old_top;
   }
 
   template<typename _Bi_iter>
