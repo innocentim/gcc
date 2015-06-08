@@ -293,63 +293,64 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	bool _M_found;
       };
 
+      struct _Saved_tag
+      {
+	enum _Type
+	  {
+	    _S_saved_state,
+	    _S_saved_paren,
+	    _S_saved_position,
+	    _S_saved_dfs_repeat,
+	  };
+
+	explicit
+	_Saved_tag(_Type __tag) : _M_tag(__tag) { }
+
+	_Type _M_tag;
+      };
+
+      struct _Saved_state : public _Saved_tag
+      {
+	explicit
+	_Saved_state(_StateIdT __state)
+	: _Saved_tag(_Saved_tag::_S_saved_state), _M_state(__state) { }
+
+	_StateIdT _M_state;
+      };
+
+      struct _Saved_paren : public _Saved_tag
+      {
+	explicit
+	_Saved_paren(unsigned int __index, _Capture __paren)
+	: _Saved_tag(_Saved_tag::_S_saved_paren), _M_index(__index), _M_paren(std::move(__paren)) { }
+
+	unsigned int _M_index;
+	_Capture _M_paren;
+      };
+
+      struct _Saved_position : public _Saved_tag
+      {
+	explicit
+	_Saved_position(_Bi_iter __position)
+	: _Saved_tag(_Saved_tag::_S_saved_position), _M_position(std::move(__position)) { }
+
+	_Bi_iter _M_position;
+      };
+
+      struct _Saved_dfs_repeat : public _Saved_tag
+      {
+	explicit
+	_Saved_dfs_repeat(_StateIdT __next, const std::pair<int, _Bi_iter>& __last, const _Bi_iter& __current)
+	: _Saved_tag(_Saved_tag::_S_saved_dfs_repeat), _M_next(__next), _M_last(__last), _M_current(__current) { }
+
+	_StateIdT _M_next;
+	std::pair<int, _Bi_iter> _M_last;
+	_Bi_iter _M_current;
+      };
+
       class _Stack_handlers
       {
       public:
-	struct _Tag
-	{
-	  enum _Type
-	    {
-	      _S_saved_state,
-	      _S_saved_paren,
-	      _S_saved_position,
-	      _S_saved_dfs_repeat,
-	    };
-
-	  explicit
-	  _Tag(_Type __tag) : _M_tag(__tag) { }
-
-	  _Type _M_tag;
-	};
-
-	struct _Saved_state : public _Tag
-	{
-	  explicit
-	  _Saved_state(_StateIdT __state)
-	  : _Tag(_Tag::_S_saved_state), _M_state(__state) { }
-
-	  _StateIdT _M_state;
-	};
-
-	struct _Saved_paren : public _Tag
-	{
-	  explicit
-	  _Saved_paren(unsigned int __index, _Capture __paren)
-	  : _Tag(_Tag::_S_saved_paren), _M_index(__index), _M_paren(std::move(__paren)) { }
-
-	  unsigned int _M_index;
-	  _Capture _M_paren;
-	};
-
-	struct _Saved_position : public _Tag
-	{
-	  explicit
-	  _Saved_position(_Bi_iter __position)
-	  : _Tag(_Tag::_S_saved_position), _M_position(std::move(__position)) { }
-
-	  _Bi_iter _M_position;
-	};
-
-	struct _Saved_dfs_repeat : public _Tag
-	{
-	  explicit
-	  _Saved_dfs_repeat(const std::pair<int, _Bi_iter>& __last, const _Bi_iter& __current)
-	  : _Tag(_Tag::_S_saved_dfs_repeat), _M_last(__last), _M_current(__current) { }
-
-	  std::pair<int, _Bi_iter> _M_last;
-	  _Bi_iter _M_current;
-	};
-
 	explicit
 	_Stack_handlers(_Dynamic_stack& __stack) : _M_stack(__stack) { }
 
@@ -459,10 +460,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _M_handle_repeat(_Context_t& __context, const _State<_Traits>& __state, _Match_head& __head);
 
 	  void
-	  _M_restore_dfs_repeat(_Context_t& __context, const std::pair<int, _Bi_iter>& __last, const _Bi_iter __current)
+	  _M_restore_dfs_repeat(const _Saved_dfs_repeat& __save, _Context_t& __context, _Match_head& __head)
 	  {
-	    _M_last = __last;
-	    __context._M_current = __current;
+	    _M_last = __save._M_last;
+	    __context._M_current = __save._M_current;
+	    __head._M_state = __save._M_next;
+	    __context._M_dfs(__head);
 	  }
 
 	  bool
@@ -549,7 +552,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    return false;
 	  }
 
-	  _M_restore_dfs_repeat(_Context_t& __context, const std::pair<int, _Bi_iter>& __last, const _Bi_iter __current) { }
+	  void
+	  _M_restore_dfs_repeat(const _Saved_dfs_repeat& __save, _Context_t& __context, _Match_head& __head) { }
 
 	private:
 	  bool
