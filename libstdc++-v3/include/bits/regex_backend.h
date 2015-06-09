@@ -449,6 +449,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  using _Context_t = _Context<_Dfs_executer, _Traits, __is_ecma>;
 
 	public:
+	  _Dfs_executer() : _M_stack(__get_dynamic_stack()) {}
+
+	  template<typename _Tp, typename... _Args>
+	    void
+	    _M_push(_Args&&... __args)
+	    { _M_stack._M_push<_Tp>(_Tp(std::forward<_Args>(__args)...)); }
+
 	  bool
 	  _M_search_from_first(_Context_t& __context, _StateIdT __start, size_t __size, _Captures& __result);
 
@@ -458,6 +465,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 	  bool
 	  _M_handle_repeat(_Context_t& __context, const _State<_Traits>& __state, _Match_head& __head);
+
+	  bool
+	  _M_handle_alt(_Context_t& __context)
+	  { this->_M_push<_Saved_position>(__context._M_current); }
 
 	  void
 	  _M_restore_dfs_repeat(const _Saved_dfs_repeat& __save, _Context_t& __context, _Match_head& __head)
@@ -480,6 +491,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 	private:
 	  std::pair<int, _Bi_iter> _M_last;
+	  _Stack_handlers _M_stack;
 	};
 
       class _Bfs_ecma_mixin
@@ -529,6 +541,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  using _Context_t = _Context<_Bfs_executer, _Traits, __is_ecma>;
 
 	public:
+	  _Bfs_executer() : _M_stack(__get_dynamic_stack()) {}
+
+	  template<typename _Tp, typename... _Args>
+	    void
+	    _M_push(_Args&&... __args)
+	    { _M_stack._M_push<_Tp>(_Tp(std::forward<_Args>(__args)...)); }
+
 	  bool
 	  _M_search_from_first(_Context_t& __context, _StateIdT __start, size_t __size, _Captures& __result);
 
@@ -538,6 +557,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 	  bool
 	  _M_handle_repeat(_Context_t& __context, const _State<_Traits>& __state, _Match_head& __head);
+
+	  bool
+	  _M_handle_alt(_Context_t& __context) { }
 
 	  bool
 	  _M_handle_match(_Context_t& __context, const _State<_Traits>& __state, const _Match_head& __head);
@@ -561,6 +583,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 	  std::vector<_Match_head> _M_heads;
 	  _Captures _M_result;
+	  _Stack_handlers _M_stack;
 	  bool _M_found;
 	};
 
@@ -569,8 +592,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{
 	public:
 	  static constexpr bool _S_is_ecma = __is_ecma;
-
-	  _Context(_Dynamic_stack& __dynamic_stack) : _M_stack(__dynamic_stack) { }
 
 	  void
 	  _M_init(_Bi_iter __begin, _Bi_iter __end, const _NFA<_Traits>& __nfa,
@@ -618,7 +639,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  const _NFA<_Traits>* _M_nfa;
 	  regex_constants::match_flag_type _M_flags;
 	  _Regex_search_mode _M_search_mode;
-	  _Stack_handlers _M_stack;
 	  _Executer _M_executer;
 
 	  friend class _Stack_handlers;

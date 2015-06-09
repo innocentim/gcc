@@ -286,7 +286,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       _M_last.first = 0;
       this->_M_reset(__start, __size);
-      __context._M_stack._M_exec(this->_M_get_head(), __context);
+      _M_stack._M_exec(this->_M_get_head(), __context);
       if (this->_M_get_head()._M_found)
 	{
 	  this->_M_get_result(__result);
@@ -308,7 +308,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _StateIdT __first = __state._M_alt, __second = __state._M_next;
       if (__state._M_neg)
 	swap(__first, __second);
-      __context._M_stack.template _M_push<_Saved_dfs_repeat>(__second, _M_last, __current);
+      _M_stack.template _M_push<_Saved_dfs_repeat>(__second, _M_last, __current);
       if (_M_last.first == 0 || _M_last.second != __current)
 	{
 	  _M_last.first = 0;
@@ -403,7 +403,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  this->_M_clear();
 	  auto __heads = std::move(_M_heads);
 	  for (auto& __head : __heads)
-	    __context._M_stack._M_exec(__head, __context);
+	    _M_stack._M_exec(__head, __context);
 	  __found = __found || _M_found;
 	  if (__context._M_current != __context._M_end)
 	    ++__context._M_current;
@@ -420,7 +420,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _StateIdT __first = __state._M_alt, __second = __state._M_next;
       if (__state._M_neg)
 	swap(__first, __second);
-      __context._M_stack.template _M_push<_Saved_state>(__second);
+      _M_stack.template _M_push<_Saved_state>(__second);
       __head._M_state = __first;
       return true;
     }
@@ -516,7 +516,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    case _S_opcode_subexpr_begin:
 	      {
 		auto& __paren = __head._M_parens[__state._M_subexpr];
-		_M_stack.template _M_push<_Saved_paren>(__state._M_subexpr, __paren);
+		_M_executer.template _M_push<_Saved_paren>(__state._M_subexpr, __paren);
 		__paren._M_set_left(_M_current);
 		__TAIL_RECURSE(__state._M_next)
 		break;
@@ -524,14 +524,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    case _S_opcode_subexpr_end:
 	      {
 		auto& __paren = __head._M_parens[__state._M_subexpr];
-		_M_stack.template _M_push<_Saved_paren>(__state._M_subexpr, __paren);
+		_M_executer.template _M_push<_Saved_paren>(__state._M_subexpr, __paren);
 		__paren._M_set_right(_M_current);
 		__TAIL_RECURSE(__state._M_next)
 	      }
 	      break;
 	    case _S_opcode_alternative:
-	      _M_stack.template _M_push<_Saved_state>(__state._M_next);
-	      _M_stack.template _M_push<_Saved_position>(_M_current);
+	      _M_executer.template _M_push<_Saved_state>(__state._M_next);
+	      _M_executer._M_handle_alt(*this);
 	      __TAIL_RECURSE(__state._M_alt)
 	      break;
 	    case _S_opcode_line_begin_assertion:
@@ -551,7 +551,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	      break;
 	    case _S_opcode_subexpr_lookahead:
 	      {
-		_Context __context(__get_dynamic_stack());
+		_Context __context;
 		__context._M_init(_M_current, _M_end,
 				 *_M_nfa, _M_flags,
 				 _M_search_mode);
@@ -566,7 +566,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 			for (size_t __i = 0; __i < __captures.size(); __i++)
 			  if (__captures[__i]._M_matched())
 			    {
-			      _M_stack.template _M_push<_Saved_paren>(__i, __res[__i]);
+			      _M_executer.template _M_push<_Saved_paren>(__i, __res[__i]);
 			      __res[__i] = __captures[__i];
 			    }
 		      }
@@ -625,7 +625,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #define _RUN(_EXECUTER_TYPE, __IS_ECMA) \
 	do \
 	  { \
-	    _Context<_EXECUTER_TYPE<_Traits, __IS_ECMA>, _Traits, __IS_ECMA> __context(__get_dynamic_stack()); \
+	    _Context<_EXECUTER_TYPE<_Traits, __IS_ECMA>, _Traits, __IS_ECMA> __context; \
 	    __context._M_init(__s, __e, __nfa, __flags, __search_mode); \
 	    __ret = __context._M_match(__res); \
 	  } \
