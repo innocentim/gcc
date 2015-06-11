@@ -353,12 +353,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     bool
     _Regex_scope<_Bi_iter>::_Bfs_ecma_mixin::
     _M_visited_impl(_StateIdT __state_id, _Match_head& __head)
-    {
-      if (_M_is_visited[__state_id])
-	return true;
-      _M_is_visited[__state_id] = true;
-      return false;
-    }
+    { return _M_is_visited[__state_id]; }
 
   template<typename _Bi_iter>
     bool
@@ -368,8 +363,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       if (_M_is_visited[__state_id])
 	if (!_M_leftmost_longest(__head._M_parens, _M_current_positions[__state_id]))
 	  return true;
-      _M_is_visited[__state_id] = true;
-      _M_current_positions[__state_id] = __head._M_parens;
       return false;
     }
 
@@ -506,6 +499,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{
 	  if (_M_executer._M_visited(__head._M_state, __head))
 	    return;
+	  auto __cleanup = __make_cleanup(std::bind(&_Executer::_M_visit, &_M_executer, __head._M_state, __head));
 	  const auto& __state = _M_get_state(__head._M_state);
 	  switch (__state._M_opcode)
 	    {

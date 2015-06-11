@@ -115,6 +115,24 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     void* _M_top_ptr;
   };
 
+  template<typename _Fp>
+    class _Cleanup
+    {
+    public:
+      _Cleanup(_Fp&& __f) : _M_f(std::move(__f)) { }
+
+      ~_Cleanup()
+      { _M_f(); }
+
+    private:
+      _Fp _M_f;
+    };
+
+  template<typename _Fp>
+    _Cleanup<_Fp>
+    __make_cleanup(_Fp&& __f)
+    { return _Cleanup<_Fp>(std::move(__f)); }
+
   inline _Dynamic_stack&
   __get_dynamic_stack()
   {
@@ -463,6 +481,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _M_visited(_StateIdT __state_id, _Match_head& __head)
 	  { return false; }
 
+	  void
+	  _M_visit(_StateIdT __state_id, _Match_head& __head) { }
+
 	  bool
 	  _M_handle_repeat(_Context_t& __context, const _State<_Traits>& __state, _Match_head& __head);
 
@@ -508,6 +529,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	bool
 	_M_visited_impl(_StateIdT __state_id, _Match_head& __head);
 
+	void
+	_M_visit_impl(_StateIdT __state_id, _Match_head& __head)
+	{ _M_is_visited[__state_id] = true; }
+
       private:
 	std::vector<bool> _M_is_visited;
       };
@@ -528,6 +553,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 	bool
 	_M_visited_impl(_StateIdT __state_id, _Match_head& __head);
+
+	void
+	_M_visit_impl(_StateIdT __state_id, _Match_head& __head)
+	{
+	  _M_is_visited[__state_id] = true;
+	  _M_current_positions[__state_id] = __head._M_parens;
+	}
 
       private:
 	std::vector<bool> _M_is_visited;
@@ -554,6 +586,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  bool
 	  _M_visited(_StateIdT __state_id, _Match_head& __head)
 	  { return this->_M_visited_impl(__state_id, __head); }
+
+	  void
+	  _M_visit(_StateIdT __state_id, _Match_head& __head)
+	  { return this->_M_visit_impl(__state_id, __head); }
 
 	  bool
 	  _M_handle_repeat(_Context_t& __context, const _State<_Traits>& __state, _Match_head& __head);
