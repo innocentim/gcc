@@ -55,7 +55,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   class _Dynamic_stack
   {
   public:
-    _Dynamic_stack() : _M_blocks(1), _M_base(_M_end()), _M_top_ptr(_M_end()) { }
+    _Dynamic_stack(const _Dynamic_stack&) = delete;
 
     template<typename _Tp>
       void
@@ -95,6 +95,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     { return _M_begin() <= __top && (__top < _M_end() || __top == _M_base); }
 
   private:
+    _Dynamic_stack() : _M_blocks(1), _M_base(_M_end()), _M_top_ptr(_M_end()) { }
+
     struct _Block
     { char _M_data[_GLIBCXX_REGEX_STACK_BLOCK_SIZE]; };
 
@@ -109,6 +111,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     void*
     _M_end() const noexcept
     { return const_cast<void*>(reinterpret_cast<const void*>(std::end(_M_blocks.front()._M_data))); }
+
+    friend _Dynamic_stack&
+    __get_dynamic_stack();
 
     std::forward_list<_Block> _M_blocks;
     void* _M_base;
@@ -223,9 +228,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     struct _Regex_scope
     {
       using _Char = typename iterator_traits<_Bi_iter>::value_type;
-
-      template<typename _Executer, typename _Traits, bool __is_ecma>
-	class _Context;
 
       class _Capture
       {
@@ -366,46 +368,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	_Bi_iter _M_current;
       };
 
-      class _Stack_handlers
-      {
-      public:
-	explicit
-	_Stack_handlers(_Dynamic_stack& __stack) : _M_stack(__stack) { }
-
-	template<typename _Tp, typename... _Args>
-	  void
-	  _M_push(_Args&&... __args)
-	  { _M_stack._M_push<_Tp>(_Tp(std::forward<_Args>(__args)...)); }
-
-	template<typename _Context_t>
-	  void
-	  _M_exec(_Match_head& __head, _Context_t& __context);
-
-      private:
-	template<typename _Context_t>
-	  static void
-	  _M_handle(const _Saved_state& __save, _Context_t& __context, _Match_head& __head);
-
-	template<typename _Context_t>
-	  static void
-	  _M_handle(const _Saved_paren& __save, _Context_t& __context, _Match_head& __head);
-
-	template<typename _Context_t>
-	  static void
-	  _M_handle(const _Saved_position& __save, _Context_t& __context, _Match_head& __head);
-
-	template<typename _Context_t>
-	  static void
-	  _M_handle(const _Saved_dfs_repeat& __save, _Context_t& __context, _Match_head& __head);
-
-	void
-	_M_cleanup(void* __old_top) noexcept;
-
-	_Dynamic_stack& _M_stack;
-      };
-
       template<typename _Traits, bool __is_ecma>
-	class _Context_new
+	class _Context
 	{
 	public:
 	  void
@@ -554,7 +518,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	class _Dfs_executer : private std::conditional<__is_ecma, _Dfs_ecma_mixin, _Dfs_posix_mixin>::type
 	{
 	private:
-	  using _Context_t = _Context_new<_Traits, __is_ecma>;
+	  using _Context_t = _Context<_Traits, __is_ecma>;
 
 	public:
 	  _Dfs_executer() : _M_stack(__get_dynamic_stack()) { }
@@ -737,6 +701,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		      _M_stack._M_pop<_Saved_position>(); break;
 		    case _Saved_tag::_S_saved_dfs_repeat:
 		      _M_stack._M_pop<_Saved_dfs_repeat>(); break;
+		    default: _GLIBCXX_DEBUG_ASSERT(false);
 		    };
 	    };
 
@@ -764,6 +729,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		      case _Saved_tag::_S_saved_position: __HANDLE(_Saved_position); break;
 		      case _Saved_tag::_S_saved_dfs_repeat: __HANDLE(_Saved_dfs_repeat); break;
 #undef __HANDLE
+		      default: _GLIBCXX_DEBUG_ASSERT(false);
 		      };
 		  }
 	      }
@@ -931,18 +897,243 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	class _Bfs_executer : private std::conditional<__is_ecma, _Bfs_ecma_mixin, _Bfs_posix_mixin>::type
 	{
 	private:
-	  using _Context_t = _Context<_Bfs_executer, _Traits, __is_ecma>;
+	  using _Context_t = _Context<_Traits, __is_ecma>;
 
 	public:
 	  _Bfs_executer() : _M_stack(__get_dynamic_stack()) {}
 
+	  void
+	  _M_init(_Context_t&& __context)
+	  { _M_context = std::move(__context); }
+
+	  template<typename _Bp, typename _Alloc>
+	    bool
+	    _M_match(std::vector<sub_match<_Bp>, _Alloc>& __res)
+	    {
+	      _Captures __result;
+	      if (_M_match_impl(_M_context._M_nfa->_M_start(), _M_context._M_nfa->_M_sub_count(), __result))
+		{
+		  _GLIBCXX_DEBUG_ASSERT(__res.size() >= __result.size());
+		  for (size_t __i = 0; __i < __result.size(); __i++)
+		    if ((__res[__i].matched = __result[__i]._M_matched()))
+		      {
+			__res[__i].first = __result[__i]._M_get_left();
+			__res[__i].second = __result[__i]._M_get_right();
+		      }
+		  return true;
+		}
+	      return false;
+	    }
+
+	private:
+	  void
+	  _M_exec(_Match_head& __head)
+	  {
+	    const auto __cleanup = [this](void* __old_top)
+	    {
+	      if (is_trivially_destructible<_Bi_iter>::value)
+		_M_stack._M_jump(__old_top);
+	      else
+		while (_M_stack._M_top() != __old_top)
+		  switch (_M_stack._M_top_item<_Saved_tag>()._M_tag)
+		    {
+		    case _Saved_tag::_S_saved_state:
+		      _M_stack._M_pop<_Saved_state>(); break;
+		    case _Saved_tag::_S_saved_paren:
+		      _M_stack._M_pop<_Saved_paren>(); break;
+		    default: _GLIBCXX_DEBUG_ASSERT(false);
+		    };
+	    };
+
+	    void* __top = _M_stack._M_top();
+	    __try
+	      {
+		_M_handle(_Saved_state(__head._M_state), __head);
+		while (_M_stack._M_top() != __top)
+		  {
+		    if (__is_ecma && __head._M_found)
+		      {
+			__cleanup(__top);
+			break;
+		      }
+		    switch (_M_stack.template _M_top_item<_Saved_tag>()._M_tag)
+		      {
+#define __HANDLE(_Type) \
+			  {\
+			    auto __save = std::move(_M_stack._M_top_item<_Type>());\
+			    _M_stack.template _M_pop<_Type>();\
+			    _M_handle(__save, __head);\
+			  }
+		      case _Saved_tag::_S_saved_state: __HANDLE(_Saved_state); break;
+		      case _Saved_tag::_S_saved_paren: __HANDLE(_Saved_paren); break;
+#undef __HANDLE
+		      default: _GLIBCXX_DEBUG_ASSERT(false);
+		      };
+		  }
+	      }
+	    __catch (...)
+	      {
+		__cleanup(__top);
+		__throw_exception_again;
+	      }
+	  }
+
+	  bool
+	  _M_match_impl(_StateIdT __start, size_t __size, _Captures& __result)
+	  {
+	    if (_M_context._M_search_mode == _Regex_search_mode::_Exact)
+	      return _M_search_from_first_helper(__start, __result);
+	    if (_M_search_from_first_helper(__start, __result))
+	      return true;
+	    if (_M_context._M_flags & regex_constants::match_continuous)
+	      return false;
+	    _M_context._M_flags |= regex_constants::match_prev_avail;
+	    while (_M_context._M_begin != _M_context._M_end)
+	      {
+		++_M_context._M_begin;
+		if (_M_search_from_first_helper(__start, __result))
+		  return true;
+	      }
+	    return false;
+	  }
+
+	  bool
+	  _M_search_from_first_helper(_StateIdT __start, _Captures& __result)
+	  {
+	    _M_context._M_current = _M_context._M_begin;
+	    return _M_search_from_first(__start, _M_context._M_nfa->_M_sub_count(), __result);
+	  }
+
+	  void
+	  _M_dfs(_Match_head& __head)
+	  {
+#define __TAIL_RECURSE(__new_state) { __head._M_state = (__new_state); continue; }
+	    while (1)
+	      {
+		if (_M_visited(__head._M_state, __head))
+		  return;
+		const auto __cleanup = __make_cleanup(std::bind(&_Bfs_executer::_M_visit, this, __head._M_state, __head));
+		const auto& __state = _M_context._M_get_state(__head._M_state);
+		auto& __current = _M_context._M_current;
+		switch (__state._M_opcode)
+		  {
+		  case _S_opcode_repeat:
+		    if (_M_handle_repeat(__state, __head))
+		      continue;
+		    break;
+		  case _S_opcode_subexpr_begin:
+		    {
+		      auto& __paren = __head._M_parens[__state._M_subexpr];
+		      _M_push<_Saved_paren>(__state._M_subexpr, __paren);
+		      __paren._M_set_left(__current);
+		      __TAIL_RECURSE(__state._M_next)
+		      break;
+		    }
+		  case _S_opcode_subexpr_end:
+		    {
+		      auto& __paren = __head._M_parens[__state._M_subexpr];
+		      _M_push<_Saved_paren>(__state._M_subexpr, __paren);
+		      __paren._M_set_right(__current);
+		      __TAIL_RECURSE(__state._M_next)
+		    }
+		    break;
+		  case _S_opcode_alternative:
+		    _M_push<_Saved_state>(__state._M_next);
+		    __TAIL_RECURSE(__state._M_alt)
+		    break;
+		  case _S_opcode_line_begin_assertion:
+		    if (__current == _M_context._M_begin
+			&& !(_M_context._M_flags & (regex_constants::match_not_bol | regex_constants::match_prev_avail)))
+		      __TAIL_RECURSE(__state._M_next)
+		    break;
+		  case _S_opcode_line_end_assertion:
+		    if (__current == _M_context._M_end
+			&& !(_M_context._M_flags & regex_constants::match_not_eol))
+		      __TAIL_RECURSE(__state._M_next)
+		    break;
+		  case _S_opcode_word_boundary:
+		    if (_M_context._M_word_boundary() == !__state._M_neg)
+		      __TAIL_RECURSE(__state._M_next)
+		    break;
+		  case _S_opcode_subexpr_lookahead:
+		    {
+		      _Bfs_executer __executer;
+		      {
+			_Context_t __context;
+			__context._M_init(__current, _M_context._M_end, *_M_context._M_nfa, _M_context._M_flags, _M_context._M_search_mode);
+			__executer._M_init(std::move(__context));
+		      }
+		      _Captures __captures;
+		      bool __ret = __executer._M_match_impl(__state._M_alt, __head._M_parens.size(), __captures);
+		      if (__ret != __state._M_neg)
+			{
+			  if (__ret)
+			    {
+			      auto& __res = __head._M_parens;
+			      _GLIBCXX_DEBUG_ASSERT(__res.size() == __captures.size());
+			      for (size_t __i = 0; __i < __captures.size(); __i++)
+				if (__captures[__i]._M_matched())
+				  {
+				    _M_push<_Saved_paren>(__i, __res[__i]);
+				    __res[__i] = __captures[__i];
+				  }
+			    }
+			  __TAIL_RECURSE(__state._M_next)
+			}
+		    }
+		    break;
+		  case _S_opcode_match:
+		    if (_M_context._M_end == __current)
+		      break;
+		    if (_M_handle_match(__state, __head))
+		      continue;
+		    break;
+		  case _S_opcode_backref:
+		    if (_M_handle_backref(__state, __head))
+		      continue;
+		    break;
+		  case _S_opcode_accept:
+		    if (!__head._M_found)
+		      {
+			if (_M_context._M_search_mode == _Regex_search_mode::_Exact)
+			  __head._M_found = _M_context._M_end == __current;
+			else
+			  __head._M_found = true;
+			if (_M_context._M_flags & regex_constants::match_not_null)
+			  __head._M_found = __head._M_found && _M_context._M_begin != __current;
+		      }
+		    if (__head._M_found)
+		      _M_handle_accept(__head._M_parens);
+		    break;
+		  case _S_opcode_unknown:
+		  case _S_opcode_dummy:
+		    _GLIBCXX_DEBUG_ASSERT(false);
+		    break;
+		  }
+		break;
+	      }
+#undef __TAIL_RECURSE
+	  }
+
+	private:
 	  template<typename _Tp, typename... _Args>
 	    void
 	    _M_push(_Args&&... __args)
 	    { _M_stack._M_push<_Tp>(_Tp(std::forward<_Args>(__args)...)); }
 
 	  bool
-	  _M_search_from_first(_Context_t& __context, _StateIdT __start, size_t __size, _Captures& __result);
+	  _M_search_from_first(_StateIdT __start, size_t __size, _Captures& __result)
+	  {
+	    this->_M_reset(_M_context._M_nfa->size());
+	    _M_heads.clear();
+	    _M_heads.emplace_back(__start, __size);
+	    if (_M_search_from_first_impl())
+	      {
+		__result = std::move(_M_result);
+		return true;
+	      }
+	    return false;
+	  }
 
 	  bool
 	  _M_visited(_StateIdT __state_id, _Match_head& __head)
@@ -953,93 +1144,82 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  { return this->_M_visit_impl(__state_id, __head); }
 
 	  bool
-	  _M_handle_repeat(_Context_t& __context, const _State<_Traits>& __state, _Match_head& __head);
+	  _M_handle_repeat(const _State<_Traits>& __state, _Match_head& __head)
+	  {
+	    _StateIdT __first = __state._M_alt, __second = __state._M_next;
+	    if (__state._M_neg)
+	      swap(__first, __second);
+	    _M_push<_Saved_state>(__second);
+	    __head._M_state = __first;
+	    return true;
+	  }
 
 	  bool
-	  _M_handle_alt(_Context_t& __context) { }
-
-	  bool
-	  _M_handle_match(_Context_t& __context, const _State<_Traits>& __state, const _Match_head& __head);
+	  _M_handle_match(const _State<_Traits>& __state, const _Match_head& __head)
+	  {
+	    if (!__state._M_matches(*_M_context._M_current))
+	      return false;
+	    if (__is_ecma && _M_found)
+	      return false;
+	    _M_heads.emplace_back(__head);
+	    _M_heads.back()._M_state = __state._M_next;
+	    return false;
+	  }
 
 	  void
-	  _M_handle_accept(const _Captures& __captures);
+	  _M_handle_accept(const _Captures& __captures)
+	  {
+	    _M_found = true;
+	    if (__is_ecma || (_M_result.empty() || _M_leftmost_longest(__captures, _M_result)))
+	      _M_result = __captures;
+	  }
 
 	  bool
-	  _M_handle_backref(_Context_t& __context, const _State<_Traits>& __state, _Match_head& __head)
+	  _M_handle_backref(const _State<_Traits>& __state, _Match_head& __head)
 	  {
 	    _GLIBCXX_DEBUG_ASSERT(false);
 	    return false;
 	  }
 
-	  void
-	  _M_restore_dfs_repeat(const _Saved_dfs_repeat& __save, _Context_t& __context, _Match_head& __head) { }
-
 	private:
 	  bool
-	  _M_search_from_first_impl(_Context_t& __context);
-
-	  std::vector<_Match_head> _M_heads;
-	  _Captures _M_result;
-	  _Stack_handlers _M_stack;
-	  bool _M_found;
-	};
-
-      template<typename _Executer, typename _Traits, bool __is_ecma>
-	class _Context
-	{
-	public:
-	  static constexpr bool _S_is_ecma = __is_ecma;
-
-	  void
-	  _M_init(_Bi_iter __begin, _Bi_iter __end, const _NFA<_Traits>& __nfa,
-		  regex_constants::match_flag_type __flags,
-		  _Regex_search_mode __search_mode);
-
-	  template<typename _Bp, typename _Alloc>
-	    bool
-	    _M_match(std::vector<sub_match<_Bp>, _Alloc>& __res);
-
-	private:
-	  bool
-	  _M_match_impl(_StateIdT __start, size_t __size, _Captures& __result);
-
-	  bool
-	  _M_search_from_first_helper(_StateIdT __start, _Captures& __result)
+	  _M_search_from_first_impl()
 	  {
-	    _M_current = _M_begin;
-	    return _M_executer._M_search_from_first(*this, __start, _M_nfa->_M_sub_count(), __result);
+	    bool __found = false;
+	    while (!_M_heads.empty())
+	      {
+		_M_found = false;
+		this->_M_clear();
+		auto __heads = std::move(_M_heads);
+		for (auto& __head : __heads)
+		  _M_exec(__head);
+		__found = __found || _M_found;
+		if (_M_context._M_current != _M_context._M_end)
+		  ++_M_context._M_current;
+	      }
+	    return __found;
 	  }
 
 	  void
-	  _M_dfs(_Match_head& __head);
+	  _M_handle(const _Saved_state& __save, _Match_head& __head)
+	  {
+	    __head._M_state = __save._M_state;
+	    _M_dfs(__head);
+	  }
 
-	  const _Traits&
-	  _M_traits() const
-	  { return _M_nfa->_M_traits; }
+	  void
+	  _M_handle(const _Saved_paren& __save, _Match_head& __head)
+	  { __head._M_parens[__save._M_index] = std::move(__save._M_paren); }
 
-	  const _State<_Traits>&
-	  _M_get_state(_StateIdT __state_id) const
-	  { return (*_M_nfa)[__state_id]; }
+	  void
+	  _M_handle(const _Saved_position& __save, _Match_head& __head)
+	  { _M_context._M_current = std::move(__save._M_position); }
 
-	  bool
-	  _M_is_word(_Char __ch) const;
-
-	  bool
-	  _M_word_boundary() const;
-
-	  bool
-	  _M_match_backref(unsigned int __index, _Match_head& __head);
-
-	  _Bi_iter _M_begin;
-	  _Bi_iter _M_end;
-	  _Bi_iter _M_current;
-	  const _NFA<_Traits>* _M_nfa;
-	  regex_constants::match_flag_type _M_flags;
-	  _Regex_search_mode _M_search_mode;
-	  _Executer _M_executer;
-
-	  friend class _Stack_handlers;
-	  template<typename, bool> friend class _Bfs_executer;
+	  _Context_t _M_context;
+	  std::vector<_Match_head> _M_heads;
+	  _Captures _M_result;
+	  _Dynamic_stack& _M_stack;
+	  bool _M_found;
 	};
 
       template<_RegexExecutorPolicy __policy, typename _Bp, typename _Alloc, typename _Traits>
