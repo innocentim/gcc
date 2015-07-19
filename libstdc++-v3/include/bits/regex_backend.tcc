@@ -279,77 +279,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 
   template<typename _Bi_iter>
-  template<typename _Traits, bool __is_ecma>
-    bool
-    _Regex_scope<_Bi_iter>::_Dfs_executer<_Traits, __is_ecma>::
-    _M_search_from_first(_Context_t& __context, _StateIdT __start, size_t __size, _Captures& __result)
-    {
-      _M_last.first = 0;
-      this->_M_reset(__start, __size);
-      _M_stack._M_exec(this->_M_get_head(), __context);
-      if (this->_M_get_head()._M_found)
-	{
-	  this->_M_get_result(__result);
-	  return true;
-	}
-      return false;
-    }
-
-  template<typename _Bi_iter>
-  template<typename _Traits, bool __is_ecma>
-    bool
-    _Regex_scope<_Bi_iter>::_Dfs_executer<_Traits, __is_ecma>::
-    _M_handle_repeat(_Context_t& __context, const _State<_Traits>& __state, _Match_head& __head)
-    {
-      const auto& __current = __context._M_current;
-      if (_M_last.first == 2 && _M_last.second == __current)
-	return false;
-
-      _StateIdT __first = __state._M_alt, __second = __state._M_next;
-      if (__state._M_neg)
-	swap(__first, __second);
-      _M_stack.template _M_push<_Saved_dfs_repeat>(__second, _M_last, __current);
-      if (_M_last.first == 0 || _M_last.second != __current)
-	{
-	  _M_last.first = 0;
-	  _M_last.second = __current;
-	}
-      _M_last.first++;
-
-      __head._M_state = __first;
-      return true;
-    }
-
-  template<typename _Bi_iter>
-  template<typename _Traits, bool __is_ecma>
-    bool
-    _Regex_scope<_Bi_iter>::_Dfs_executer<_Traits, __is_ecma>::
-    _M_handle_match(_Context_t& __context, const _State<_Traits>& __state, _Match_head& __head)
-    {
-      if (__state._M_matches(*__context._M_current))
-	{
-	  ++__context._M_current;
-	  __head._M_state = __state._M_next;
-	  return true;
-	}
-      return false;
-    }
-
-  template<typename _Bi_iter>
-  template<typename _Traits, bool __is_ecma>
-    bool
-    _Regex_scope<_Bi_iter>::_Dfs_executer<_Traits, __is_ecma>::
-    _M_handle_backref(_Context_t& __context, const _State<_Traits>& __state, _Match_head& __head)
-    {
-      if (__context._M_match_backref(__state._M_backref_index, __head))
-	{
-	  __head._M_state = __state._M_next;
-	  return true;
-	}
-      return false;
-    }
-
-  template<typename _Bi_iter>
     bool
     _Regex_scope<_Bi_iter>::_Bfs_ecma_mixin::
     _M_visited_impl(_StateIdT __state_id, _Match_head& __head)
@@ -625,9 +554,25 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  } \
 	while (false)
       if (!__use_bfs && __is_ecma)
-	_RUN(_Dfs_executer, true);
+	{
+	  _Dfs_executer<_Traits, true> __executer;
+	  {
+	    _Context_new<_Traits, true> __context;
+	    __context._M_init(__s, __e, __nfa, __flags, __search_mode);
+	    __executer._M_init(std::move(__context));
+	  }
+	  __ret = __executer._M_match(__res);
+	}
       else if (!__use_bfs && !__is_ecma)
-	_RUN(_Dfs_executer, false);
+	{
+	  _Dfs_executer<_Traits, false> __executer;
+	  {
+	    _Context_new<_Traits, false> __context;
+	    __context._M_init(__s, __e, __nfa, __flags, __search_mode);
+	    __executer._M_init(std::move(__context));
+	  }
+	  __ret = __executer._M_match(__res);
+	}
       else if (__use_bfs && __is_ecma)
 	_RUN(_Bfs_executer, true);
       else
