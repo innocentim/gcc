@@ -142,12 +142,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	do \
 	  { \
 	    _Executer_type<_Traits, __IS_ECMA> __executer; \
-	    { \
-	      _Context<_Traits, __IS_ECMA> __context; \
-	      __context._M_init(__s, __e, __nfa, __flags, __search_mode); \
-	      __executer._M_init(std::move(__context)); \
-	    } \
-	    __ret = __executer._M_match(__res); \
+	    __executer._M_get_context()._M_init(__s, __e, __nfa, __flags, __search_mode); \
+	    __ret = __match(__executer, __res); \
 	  } \
 	while (false)
       if (!__use_bfs && __is_ecma)
