@@ -120,24 +120,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     void* _M_top_ptr;
   };
 
-  template<typename _Fp>
-    class _Cleanup
-    {
-    public:
-      _Cleanup(_Fp&& __f) : _M_f(std::move(__f)) { }
-
-      ~_Cleanup()
-      { _M_f(); }
-
-    private:
-      _Fp _M_f;
-    };
-
-  template<typename _Fp>
-    _Cleanup<_Fp>
-    __make_cleanup(_Fp&& __f)
-    { return _Cleanup<_Fp>(std::move(__f)); }
-
   inline _Dynamic_stack&
   __get_dynamic_stack()
   {
@@ -368,7 +350,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	_Bi_iter _M_current;
       };
 
-      template<typename _Traits, bool __is_ecma>
+      template<typename _Traits>
 	class _Context
 	{
 	public:
@@ -461,47 +443,154 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _Dynamic_stack& _M_stack;
 	};
 
-      template<typename _Executer, typename _Context, typename _Traits>
-	static bool
-	__handle_lookahead_common(_Context& __context, const _State<_Traits>& __state, _Match_head& __head)
+      template<typename _Executer>
+	static void
+	_M_dfs(_Executer& __executer, _Match_head& __head)
 	{
-	  _Executer __executer;
-	  __executer._M_get_context()._M_init(__context._M_current, __context._M_end, *__context._M_nfa, __context._M_flags, __context._M_search_mode);
-	  _Captures __captures;
-	  bool __ret = __match_impl(__executer, __state._M_alt, __captures);
-	  if (__ret != __state._M_neg)
+	  while (1)
 	    {
-	      if (__ret)
+	      if (__executer._M_visited(__head._M_state, __head))
+		return;
+	      __executer._M_visit(__head._M_state, __head);
+	      const auto& __state = __executer._M_get_context()._M_get_state(__head._M_state);
+	      switch (__state._M_opcode)
 		{
-		  auto& __res = __head._M_parens;
-		  _GLIBCXX_DEBUG_ASSERT(__res.size() == __captures.size());
-		  for (size_t __i = 0; __i < __captures.size(); __i++)
-		    if (__captures[__i]._M_matched())
-		      {
-			__context._M_stack._M_push(_Saved_paren(__i, __res[__i]));
-			__res[__i] = __captures[__i];
-		      }
+#define _DFS_DISPATCH_ENTRY(__opcode, __func_name) \
+		case __opcode: \
+		  { \
+		    if (__executer.__func_name(__state, __head)) \
+		      continue; \
+		    break; \
+		  }
+		_DFS_DISPATCH_ENTRY(_S_opcode_repeat, _M_handle_repeat);
+		_DFS_DISPATCH_ENTRY(_S_opcode_subexpr_begin, _M_handle_subexpr_begin);
+		_DFS_DISPATCH_ENTRY(_S_opcode_subexpr_end, _M_handle_subexpr_end);
+		_DFS_DISPATCH_ENTRY(_S_opcode_alternative, _M_handle_alternative);
+		_DFS_DISPATCH_ENTRY(_S_opcode_line_begin_assertion, _M_handle_line_begin_assertion);
+		_DFS_DISPATCH_ENTRY(_S_opcode_line_end_assertion, _M_handle_line_end_assertion);
+		_DFS_DISPATCH_ENTRY(_S_opcode_word_boundary, _M_handle_word_boundary);
+		_DFS_DISPATCH_ENTRY(_S_opcode_subexpr_lookahead, _M_handle_subexpr_lookahead);
+		_DFS_DISPATCH_ENTRY(_S_opcode_match, _M_handle_match);
+		_DFS_DISPATCH_ENTRY(_S_opcode_backref, _M_handle_backref);
+		_DFS_DISPATCH_ENTRY(_S_opcode_accept, _M_handle_accept);
+#undef _DFS_DISPATCH_ENTRY
+		case _S_opcode_unknown:
+		case _S_opcode_dummy:
+		  _GLIBCXX_DEBUG_ASSERT(false);
 		}
-	      __head._M_state = __state._M_next;
-	      return true;
+	      break;
 	    }
-	  return false;
 	}
 
-      template<typename _Context>
-	static void
-	__handle_accept_common(const _Context& __context, _Match_head& __head)
-	{
-	  if (!__head._M_found)
-	    {
-	      if (__context._M_search_mode == _Regex_search_mode::_Exact)
-		__head._M_found = __context._M_end == __context._M_current;
-	      else
-		__head._M_found = true;
-	      if (__context._M_flags & regex_constants::match_not_null)
-		__head._M_found = __head._M_found && __context._M_begin != __context._M_current;
-	    }
-	}
+        template<typename _Traits>
+	  static bool
+	  _M_handle_subexpr_begin_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head)
+	  {
+	    auto& __paren = __head._M_parens[__state._M_subexpr];
+	    __context._M_stack._M_push(_Saved_paren(__state._M_subexpr, __paren));
+	    __paren._M_set_left(__context._M_current);
+	    __head._M_state = __state._M_next;
+	    return true;
+	  }
+
+        template<typename _Traits>
+	  static bool
+	  _M_handle_subexpr_end_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head)
+	  {
+	    auto& __paren = __head._M_parens[__state._M_subexpr];
+	    __context._M_stack._M_push(_Saved_paren(__state._M_subexpr, __paren));
+	    __paren._M_set_right(__context._M_current);
+	    __head._M_state = __state._M_next;
+	    return true;
+	  }
+
+        template<typename _Traits>
+	  static bool
+	  _M_handle_alternative_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head)
+	  {
+	    __context._M_stack._M_push(_Saved_state(__state._M_next));
+	    __head._M_state = __state._M_alt;
+	    return true;
+	  }
+
+        template<typename _Traits>
+	  static bool
+	  _M_handle_line_begin_assertion_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head)
+	  {
+	    if (__context._M_current == __context._M_begin
+		&& !(__context._M_flags & (regex_constants::match_not_bol | regex_constants::match_prev_avail)))
+	      {
+		__head._M_state = __state._M_next;
+		return true;
+	      }
+	    return false;
+	  }
+
+        template<typename _Traits>
+	  static bool
+	  _M_handle_line_end_assertion_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head)
+	  {
+	    if (__context._M_current == __context._M_end && !(__context._M_flags & regex_constants::match_not_eol))
+	      {
+		__head._M_state = __state._M_next;
+		return true;
+	      }
+	    return false;
+	  }
+
+        template<typename _Traits>
+	  static bool
+	  _M_handle_word_boundary_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head)
+	  {
+	    if (__context._M_word_boundary() == !__state._M_neg)
+	      {
+		__head._M_state = __state._M_next;
+		return true;
+	      }
+	    return false;
+	  }
+
+        template<typename _Executer, typename _Traits>
+	  static bool
+	  _M_handle_subexpr_lookahead_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head)
+	  {
+	    _Executer __executer;
+	    __executer._M_get_context()._M_init(__context._M_current, __context._M_end, *__context._M_nfa, __context._M_flags, __context._M_search_mode);
+	    _Captures __captures;
+	    bool __ret = __match_impl(__executer, __state._M_alt, __captures);
+	    if (__ret != __state._M_neg)
+	      {
+		if (__ret)
+		  {
+		    auto& __res = __head._M_parens;
+		    _GLIBCXX_DEBUG_ASSERT(__res.size() == __captures.size());
+		    for (size_t __i = 0; __i < __captures.size(); __i++)
+		      if (__captures[__i]._M_matched())
+			{
+			  __context._M_stack._M_push(_Saved_paren(__i, __res[__i]));
+			  __res[__i] = __captures[__i];
+			}
+		  }
+		__head._M_state = __state._M_next;
+		return true;
+	      }
+	    return false;
+	  }
+
+        template<typename _Traits>
+	  static void
+	  _M_handle_accept_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head)
+	  {
+	    if (!__head._M_found)
+	      {
+		if (__context._M_search_mode == _Regex_search_mode::_Exact)
+		  __head._M_found = __context._M_end == __context._M_current;
+		else
+		  __head._M_found = true;
+		if (__context._M_flags & regex_constants::match_not_null)
+		  __head._M_found = __head._M_found && __context._M_begin != __context._M_current;
+	      }
+	  }
 
       class _Dfs_ecma_mixin
       {
@@ -562,11 +651,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       template<typename _Traits, bool __is_ecma>
 	class _Dfs_executer : private std::conditional<__is_ecma, _Dfs_ecma_mixin, _Dfs_posix_mixin>::type
 	{
-	private:
-	  using _Context_t = _Context<_Traits, __is_ecma>;
-
 	public:
-	  _Context_t&
+	  _Context<_Traits>&
 	  _M_get_context()
 	  { return _M_context; }
 
@@ -585,6 +671,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  }
 
 	private:
+	  bool
+	  _M_visited(_StateIdT __state_id, _Match_head& __head)
+	  { return false; }
+
+	  void
+	  _M_visit(_StateIdT __state_id, _Match_head& __head)
+	  { }
+
 	  void
 	  _M_exec(_Match_head& __head)
 	  {
@@ -644,83 +738,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	      }
 	  }
 
-	  void
-	  _M_dfs(_Match_head& __head)
-	  {
-#define __TAIL_RECURSE(__new_state) { __head._M_state = (__new_state); continue; }
-	    while (1)
-	      {
-		const auto& __state = _M_context._M_get_state(__head._M_state);
-		const auto& __current = _M_context._M_current;
-		switch (__state._M_opcode)
-		  {
-		  case _S_opcode_repeat:
-		    if (_M_handle_repeat(__state, __head))
-		      continue;
-		    break;
-		  case _S_opcode_subexpr_begin:
-		    {
-		      auto& __paren = __head._M_parens[__state._M_subexpr];
-		      _M_push<_Saved_paren>(__state._M_subexpr, __paren);
-		      __paren._M_set_left(__current);
-		      __TAIL_RECURSE(__state._M_next)
-		      break;
-		    }
-		  case _S_opcode_subexpr_end:
-		    {
-		      auto& __paren = __head._M_parens[__state._M_subexpr];
-		      _M_push<_Saved_paren>(__state._M_subexpr, __paren);
-		      __paren._M_set_right(__current);
-		      __TAIL_RECURSE(__state._M_next)
-		    }
-		    break;
-		  case _S_opcode_alternative:
-		    _M_push<_Saved_state>(__state._M_next);
-		    _M_handle_alt();
-		    __TAIL_RECURSE(__state._M_alt)
-		    break;
-		  case _S_opcode_line_begin_assertion:
-		    if (__current == _M_context._M_begin
-			&& !(_M_context._M_flags & (regex_constants::match_not_bol | regex_constants::match_prev_avail)))
-		      __TAIL_RECURSE(__state._M_next)
-		    break;
-		  case _S_opcode_line_end_assertion:
-		    if (__current == _M_context._M_end && !(_M_context._M_flags & regex_constants::match_not_eol))
-		      __TAIL_RECURSE(__state._M_next)
-		    break;
-		  case _S_opcode_word_boundary:
-		    if (_M_context._M_word_boundary() == !__state._M_neg)
-		      __TAIL_RECURSE(__state._M_next)
-		    break;
-		  case _S_opcode_subexpr_lookahead:
-		    if (__handle_lookahead_common<_Dfs_executer>(_M_context, __state, __head))
-		      continue;
-		    break;
-		  case _S_opcode_match:
-		    if (_M_context._M_end == __current)
-		      break;
-		    if (_M_handle_match(__state, __head))
-		      continue;
-		    break;
-		  case _S_opcode_backref:
-		    if (_M_handle_backref(__state, __head))
-		      continue;
-		    break;
-		  case _S_opcode_accept:
-		    __handle_accept_common(_M_context, __head);
-		    if (__head._M_found)
-		      _M_handle_accept(__head._M_parens);
-		    break;
-		  case _S_opcode_unknown:
-		  case _S_opcode_dummy:
-		    _GLIBCXX_DEBUG_ASSERT(false);
-		    break;
-		  }
-		break;
-	      }
-#undef __TAIL_RECURSE
-	  }
-
 	  template<typename _Tp, typename... _Args>
 	    void
 	    _M_push(_Args&&... __args)
@@ -752,12 +769,43 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  }
 
 	  bool
-	  _M_handle_alt()
-	  { this->_M_push<_Saved_position>(_M_context._M_current); }
+	  _M_handle_subexpr_begin(const _State<_Traits>& __state, _Match_head& __head)
+	  { return _M_handle_subexpr_begin_common(_M_context, __state, __head); }
+
+	  bool
+	  _M_handle_subexpr_end(const _State<_Traits>& __state, _Match_head& __head)
+	  { return _M_handle_subexpr_end_common(_M_context, __state, __head); }
+
+	  bool
+	  _M_handle_alternative(const _State<_Traits>& __state, _Match_head& __head)
+	  {
+	    _M_push<_Saved_state>(__state._M_next);
+	    this->_M_push<_Saved_position>(_M_context._M_current);
+	    __head._M_state = __state._M_alt;
+	    return true;
+	  }
+
+	  bool
+	  _M_handle_line_begin_assertion(const _State<_Traits>& __state, _Match_head& __head)
+	  { return _M_handle_line_begin_assertion_common(_M_context, __state, __head); }
+
+	  bool
+	  _M_handle_line_end_assertion(const _State<_Traits>& __state, _Match_head& __head)
+	  { return _M_handle_line_end_assertion_common(_M_context, __state, __head); }
+
+	  bool
+	  _M_handle_word_boundary(const _State<_Traits>& __state, _Match_head& __head)
+	  { return _M_handle_word_boundary_common(_M_context, __state, __head); }
+
+	  bool
+	  _M_handle_subexpr_lookahead(const _State<_Traits>& __state, _Match_head& __head)
+	  { return _M_handle_subexpr_lookahead_common<_Dfs_executer>(_M_context, __state, __head); }
 
 	  bool
 	  _M_handle_match(const _State<_Traits>& __state, _Match_head& __head)
 	  {
+	    if (_M_context._M_end == _M_context._M_current)
+	      return false;
 	    if (__state._M_matches(*_M_context._M_current))
 	      {
 		++_M_context._M_current;
@@ -778,15 +826,20 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    return false;
 	  }
 
-	  void
-	  _M_handle_accept(const _Captures& __captures)
-	  { this->_M_update(__captures); }
+	  bool
+	  _M_handle_accept(const _State<_Traits>& __state, _Match_head& __head)
+	  {
+	    _M_handle_accept_common(_M_context, __state, __head);
+	    if (__head._M_found)
+	      this->_M_update(__head._M_parens);
+	    return false;
+	  }
 
 	  void
 	  _M_handle(const _Saved_state& __save, _Match_head& __head)
 	  {
 	    __head._M_state = __save._M_state;
-	    _M_dfs(__head);
+	    _M_dfs<_Dfs_executer>(*this, __head);
 	  }
 
 	  void
@@ -803,12 +856,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    _M_last = __save._M_last;
 	    _M_context._M_current = __save._M_current;
 	    __head._M_state = __save._M_next;
-	    _M_dfs(__head);
+	    _M_dfs<_Dfs_executer>(*this, __head);
 	  }
 
 	private:
-	  _Context_t _M_context;
+	  _Context<_Traits> _M_context;
 	  std::pair<int, _Bi_iter> _M_last;
+
+	  template<typename _Executer>
+	    friend void
+	    _Regex_scope<_Bi_iter>::_M_dfs(_Executer& __executer, _Match_head& __head);
 	};
 
       class _Bfs_ecma_mixin
@@ -865,11 +922,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       template<typename _Traits, bool __is_ecma>
 	class _Bfs_executer : private std::conditional<__is_ecma, _Bfs_ecma_mixin, _Bfs_posix_mixin>::type
 	{
-	private:
-	  using _Context_t = _Context<_Traits, __is_ecma>;
-
 	public:
-	  _Context_t&
+	  _Context<_Traits>&
 	  _M_get_context()
 	  { return _M_context; }
 
@@ -941,85 +995,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	      }
 	  }
 
-	  void
-	  _M_dfs(_Match_head& __head)
-	  {
-#define __TAIL_RECURSE(__new_state) { __head._M_state = (__new_state); continue; }
-	    while (1)
-	      {
-		if (_M_visited(__head._M_state, __head))
-		  return;
-		const auto __cleanup = __make_cleanup(std::bind(&_Bfs_executer::_M_visit, this, __head._M_state, __head));
-		const auto& __state = _M_context._M_get_state(__head._M_state);
-		auto& __current = _M_context._M_current;
-		switch (__state._M_opcode)
-		  {
-		  case _S_opcode_repeat:
-		    if (_M_handle_repeat(__state, __head))
-		      continue;
-		    break;
-		  case _S_opcode_subexpr_begin:
-		    {
-		      auto& __paren = __head._M_parens[__state._M_subexpr];
-		      _M_push<_Saved_paren>(__state._M_subexpr, __paren);
-		      __paren._M_set_left(__current);
-		      __TAIL_RECURSE(__state._M_next)
-		      break;
-		    }
-		  case _S_opcode_subexpr_end:
-		    {
-		      auto& __paren = __head._M_parens[__state._M_subexpr];
-		      _M_push<_Saved_paren>(__state._M_subexpr, __paren);
-		      __paren._M_set_right(__current);
-		      __TAIL_RECURSE(__state._M_next)
-		    }
-		    break;
-		  case _S_opcode_alternative:
-		    _M_push<_Saved_state>(__state._M_next);
-		    __TAIL_RECURSE(__state._M_alt)
-		    break;
-		  case _S_opcode_line_begin_assertion:
-		    if (__current == _M_context._M_begin
-			&& !(_M_context._M_flags & (regex_constants::match_not_bol | regex_constants::match_prev_avail)))
-		      __TAIL_RECURSE(__state._M_next)
-		    break;
-		  case _S_opcode_line_end_assertion:
-		    if (__current == _M_context._M_end && !(_M_context._M_flags & regex_constants::match_not_eol))
-		      __TAIL_RECURSE(__state._M_next)
-		    break;
-		  case _S_opcode_word_boundary:
-		    if (_M_context._M_word_boundary() == !__state._M_neg)
-		      __TAIL_RECURSE(__state._M_next)
-		    break;
-		  case _S_opcode_subexpr_lookahead:
-		    if (__handle_lookahead_common<_Bfs_executer>(_M_context, __state, __head))
-		      continue;
-		    break;
-		  case _S_opcode_match:
-		    if (_M_context._M_end == __current)
-		      break;
-		    if (_M_handle_match(__state, __head))
-		      continue;
-		    break;
-		  case _S_opcode_backref:
-		    if (_M_handle_backref(__state, __head))
-		      continue;
-		    break;
-		  case _S_opcode_accept:
-		    __handle_accept_common(_M_context, __head);
-		    if (__head._M_found)
-		      _M_handle_accept(__head._M_parens);
-		    break;
-		  case _S_opcode_unknown:
-		  case _S_opcode_dummy:
-		    _GLIBCXX_DEBUG_ASSERT(false);
-		    break;
-		  }
-		break;
-	      }
-#undef __TAIL_RECURSE
-	  }
-
 	  template<typename _Tp, typename... _Args>
 	    void
 	    _M_push(_Args&&... __args)
@@ -1045,8 +1020,42 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  }
 
 	  bool
+	  _M_handle_subexpr_begin(const _State<_Traits>& __state, _Match_head& __head)
+	  { return _M_handle_subexpr_begin_common(_M_context, __state, __head); }
+
+	  bool
+	  _M_handle_subexpr_end(const _State<_Traits>& __state, _Match_head& __head)
+	  { return _M_handle_subexpr_end_common(_M_context, __state, __head); }
+
+	  bool
+	  _M_handle_alternative(const _State<_Traits>& __state, _Match_head& __head)
+	  {
+	    _M_push<_Saved_state>(__state._M_next);
+	    __head._M_state = __state._M_alt;
+	    return true;
+	  }
+
+	  bool
+	  _M_handle_line_begin_assertion(const _State<_Traits>& __state, _Match_head& __head)
+	  { return _M_handle_line_begin_assertion_common(_M_context, __state, __head); }
+
+	  bool
+	  _M_handle_line_end_assertion(const _State<_Traits>& __state, _Match_head& __head)
+	  { return _M_handle_line_end_assertion_common(_M_context, __state, __head); }
+
+	  bool
+	  _M_handle_word_boundary(const _State<_Traits>& __state, _Match_head& __head)
+	  { return _M_handle_word_boundary_common(_M_context, __state, __head); }
+
+	  bool
+	  _M_handle_subexpr_lookahead(const _State<_Traits>& __state, _Match_head& __head)
+	  { return _M_handle_subexpr_lookahead_common<_Bfs_executer>(_M_context, __state, __head); }
+
+	  bool
 	  _M_handle_match(const _State<_Traits>& __state, const _Match_head& __head)
 	  {
+	    if (_M_context._M_end == _M_context._M_current)
+	      return false;
 	    if (!__state._M_matches(*_M_context._M_current))
 	      return false;
 	    if (__is_ecma && _M_found)
@@ -1056,18 +1065,24 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    return false;
 	  }
 
-	  void
-	  _M_handle_accept(const _Captures& __captures)
-	  {
-	    _M_found = true;
-	    if (__is_ecma || (_M_result.empty() || _M_leftmost_longest(__captures, _M_result)))
-	      _M_result = __captures;
-	  }
-
 	  bool
 	  _M_handle_backref(const _State<_Traits>& __state, _Match_head& __head)
 	  {
 	    _GLIBCXX_DEBUG_ASSERT(false);
+	    return false;
+	  }
+
+	  bool
+	  _M_handle_accept(const _State<_Traits>& __state, _Match_head& __head)
+	  {
+	    _M_handle_accept_common(_M_context, __state, __head);
+	    if (__head._M_found)
+	      {
+		_M_found = true;
+		auto& __captures = __head._M_parens;
+		if (__is_ecma || (_M_result.empty() || _M_leftmost_longest(__captures, _M_result)))
+		  _M_result = __captures;
+	      }
 	    return false;
 	  }
 
@@ -1094,7 +1109,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _M_handle(const _Saved_state& __save, _Match_head& __head)
 	  {
 	    __head._M_state = __save._M_state;
-	    _M_dfs(__head);
+	    _M_dfs<_Bfs_executer>(*this, __head);
 	  }
 
 	  void
@@ -1105,10 +1120,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _M_handle(const _Saved_position& __save, _Match_head& __head)
 	  { _M_context._M_current = std::move(__save._M_position); }
 
-	  _Context_t _M_context;
+	  _Context<_Traits> _M_context;
 	  std::vector<_Match_head> _M_heads;
 	  _Captures _M_result;
 	  bool _M_found;
+
+	  template<typename _Executer>
+	    friend void
+	    _Regex_scope<_Bi_iter>::_M_dfs(_Executer& __executer, _Match_head& __head);
 	};
 
       template<typename _Executer, typename _Bp, typename _Alloc>
