@@ -403,37 +403,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    return false;
 	  }
 
-	  bool
-	  _M_match_backref(unsigned int __index, _Match_head& __head)
-	  {
-	    const auto& __capture = __head._M_parens[__index];
-	    if (!__capture._M_matched())
-	      return false;
-
-	    auto __new_current = _M_current;
-	    auto __start = __capture._M_get_left();
-	    auto __end = __capture._M_get_right();
-	    bool __ret = [&]
-	      {
-		for (auto __len = std::distance(__start, __end); __len > 0; __len--)
-		  {
-		    if (__new_current == _M_end)
-		      return false;
-		    ++__new_current;
-		  }
-		if (_M_nfa->_M_options() & regex_constants::collate)
-		  return _M_traits().transform(__start, __end)
-		    == _M_traits().transform(_M_current, __new_current);
-		return std::equal(__start, __end, _M_current);
-	      }();
-	    if (__ret)
-	      {
-		_M_current = __new_current;
-		return true;
-	      }
-	    return false;
-	  }
-
 	  _Bi_iter _M_begin;
 	  _Bi_iter _M_end;
 	  _Bi_iter _M_current;
@@ -818,8 +787,30 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  bool
 	  _M_handle_backref(const _State<_Traits>& __state, _Match_head& __head)
 	  {
-	    if (_M_context._M_match_backref(__state._M_backref_index, __head))
+	    const auto& __capture = __head._M_parens[__state._M_backref_index];
+	    if (!__capture._M_matched())
+	      return false;
+
+	    auto& __current = _M_context._M_current;
+	    auto __new_current = __current;
+	    auto __start = __capture._M_get_left();
+	    auto __end = __capture._M_get_right();
+	    bool __ret = [&]
 	      {
+		for (auto __len = std::distance(__start, __end); __len > 0; __len--)
+		  {
+		    if (__new_current == _M_context._M_end)
+		      return false;
+		    ++__new_current;
+		  }
+		if (_M_context._M_nfa->_M_options() & regex_constants::collate)
+		  return _M_context._M_traits().transform(__start, __end)
+		    == _M_context._M_traits().transform(__current, __new_current);
+		return std::equal(__start, __end, __current);
+	      }();
+	    if (__ret)
+	      {
+		__current = __new_current;
 		__head._M_state = __state._M_next;
 		return true;
 	      }
