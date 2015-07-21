@@ -191,9 +191,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _Regex_scope<_Bi_iter>::
     _M_handle_subexpr_begin_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head)
     {
-      auto& __paren = __head._M_parens[__state._M_subexpr];
-      __context._M_stack._M_push(_Saved_paren(__state._M_subexpr, __paren));
-      __paren._M_set_left(__context._M_current);
+      auto& __capture = __head._M_captures[__state._M_subexpr];
+      __context._M_stack._M_push(_Saved_capture(__state._M_subexpr, __capture));
+      __capture._M_set_left(__context._M_current);
       __head._M_state = __state._M_next;
       return true;
     }
@@ -204,9 +204,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _Regex_scope<_Bi_iter>::
     _M_handle_subexpr_end_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head)
     {
-      auto& __paren = __head._M_parens[__state._M_subexpr];
-      __context._M_stack._M_push(_Saved_paren(__state._M_subexpr, __paren));
-      __paren._M_set_right(__context._M_current);
+      auto& __capture = __head._M_captures[__state._M_subexpr];
+      __context._M_stack._M_push(_Saved_capture(__state._M_subexpr, __capture));
+      __capture._M_set_right(__context._M_current);
       __head._M_state = __state._M_next;
       return true;
     }
@@ -279,12 +279,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{
 	  if (__ret)
 	    {
-	      auto& __res = __head._M_parens;
+	      auto& __res = __head._M_captures;
 	      _GLIBCXX_DEBUG_ASSERT(__res.size() == __captures.size());
 	      for (size_t __i = 0; __i < __captures.size(); __i++)
 		if (__captures[__i]._M_matched())
 		  {
-		    __context._M_stack._M_push(_Saved_paren(__i, __res[__i]));
+		    __context._M_stack._M_push(_Saved_capture(__i, __res[__i]));
 		    __res[__i] = __captures[__i];
 		  }
 	    }
@@ -345,8 +345,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	      {
 	      case _Saved_tag::_S_saved_state:
 		__stack.template _M_pop<_Saved_state>(); break;
-	      case _Saved_tag::_S_saved_paren:
-		__stack.template _M_pop<_Saved_paren>(); break;
+	      case _Saved_tag::_S_saved_capture:
+		__stack.template _M_pop<_Saved_capture>(); break;
 	      case _Saved_tag::_S_saved_position:
 		__stack.template _M_pop<_Saved_position>(); break;
 	      case _Saved_tag::_S_saved_dfs_repeat:
@@ -358,7 +358,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       void* __top = __stack._M_top();
       __try
 	{
-	  _M_handle(_Saved_state(__head._M_state), __head);
+	  _M_restore(_Saved_state(__head._M_state), __head);
 	  while (__stack._M_top() != __top)
 	    {
 	      if (__is_ecma && __head._M_found)
@@ -372,10 +372,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		    {\
 		      auto __save = std::move(__stack.template _M_top_item<_Type>());\
 		      __stack.template _M_pop<_Type>();\
-		      _M_handle(__save, __head);\
+		      _M_restore(__save, __head);\
 		    }
 		case _Saved_tag::_S_saved_state: __HANDLE(_Saved_state); break;
-		case _Saved_tag::_S_saved_paren: __HANDLE(_Saved_paren); break;
+		case _Saved_tag::_S_saved_capture: __HANDLE(_Saved_capture); break;
 		case _Saved_tag::_S_saved_position: __HANDLE(_Saved_position); break;
 		case _Saved_tag::_S_saved_dfs_repeat: __HANDLE(_Saved_dfs_repeat); break;
 #undef __HANDLE
@@ -453,7 +453,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _Regex_scope<_Bi_iter>::_Dfs_executer<_Traits, __is_ecma>::
     _M_handle_backref(const _State<_Traits>& __state, _Match_head& __head)
     {
-      const auto& __capture = __head._M_parens[__state._M_backref_index];
+      const auto& __capture = __head._M_captures[__state._M_backref_index];
       if (!__capture._M_matched())
 	return false;
 
@@ -491,7 +491,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       _M_handle_accept_common(_M_context, __state, __head);
       if (__head._M_found)
-	this->_M_update(__head._M_parens);
+	this->_M_update(__head._M_captures);
       return false;
     }
 
@@ -507,7 +507,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _M_visited_impl(_StateIdT __state_id, _Match_head& __head)
     {
       if (_M_is_visited[__state_id])
-	if (!_M_leftmost_longest(__head._M_parens, _M_current_positions[__state_id]))
+	if (!_M_leftmost_longest(__head._M_captures, _M_current_positions[__state_id]))
 	  return true;
       return false;
     }
@@ -546,8 +546,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	      {
 	      case _Saved_tag::_S_saved_state:
 		__stack.template _M_pop<_Saved_state>(); break;
-	      case _Saved_tag::_S_saved_paren:
-		__stack.template _M_pop<_Saved_paren>(); break;
+	      case _Saved_tag::_S_saved_capture:
+		__stack.template _M_pop<_Saved_capture>(); break;
 	      default: _GLIBCXX_DEBUG_ASSERT(false);
 	      };
       };
@@ -555,7 +555,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       void* __top = __stack._M_top();
       __try
 	{
-	  _M_handle(_Saved_state(__head._M_state), __head);
+	  _M_restore(_Saved_state(__head._M_state), __head);
 	  while (__stack._M_top() != __top)
 	    {
 	      if (__is_ecma && __head._M_found)
@@ -569,10 +569,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		    {\
 		      auto __save = std::move(__stack.template _M_top_item<_Type>());\
 		      __stack.template _M_pop<_Type>();\
-		      _M_handle(__save, __head);\
+		      _M_restore(__save, __head);\
 		    }
 		case _Saved_tag::_S_saved_state: __HANDLE(_Saved_state); break;
-		case _Saved_tag::_S_saved_paren: __HANDLE(_Saved_paren); break;
+		case _Saved_tag::_S_saved_capture: __HANDLE(_Saved_capture); break;
 #undef __HANDLE
 		default: _GLIBCXX_DEBUG_ASSERT(false);
 		};
@@ -637,7 +637,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       if (__head._M_found)
 	{
 	  _M_found = true;
-	  auto& __captures = __head._M_parens;
+	  auto& __captures = __head._M_captures;
 	  if (__is_ecma || (_M_result.empty() || _M_leftmost_longest(__captures, _M_result)))
 	    _M_result = __captures;
 	}

@@ -287,11 +287,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	_Match_head(_StateIdT __state, size_t __size) : _Match_head()
 	{
 	  _M_state = __state;
-	  _M_parens.resize(__size);
+	  _M_captures.resize(__size);
 	}
 
 	_StateIdT _M_state;
-	_Captures _M_parens;
+	_Captures _M_captures;
 	bool _M_found;
       };
 
@@ -300,7 +300,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	enum _Type
 	  {
 	    _S_saved_state,
-	    _S_saved_paren,
+	    _S_saved_capture,
 	    _S_saved_position,
 	    _S_saved_dfs_repeat,
 	  };
@@ -320,14 +320,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	_StateIdT _M_state;
       };
 
-      struct _Saved_paren : public _Saved_tag
+      struct _Saved_capture : public _Saved_tag
       {
 	explicit
-	_Saved_paren(unsigned int __index, _Capture __paren)
-	: _Saved_tag(_Saved_tag::_S_saved_paren), _M_index(__index), _M_paren(std::move(__paren)) { }
+	_Saved_capture(unsigned int __index, _Capture __capture)
+	: _Saved_tag(_Saved_tag::_S_saved_capture), _M_index(__index), _M_capture(std::move(__capture)) { }
 
 	unsigned int _M_index;
-	_Capture _M_paren;
+	_Capture _M_capture;
       };
 
       struct _Saved_position : public _Saved_tag
@@ -431,8 +431,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	void _M_reset(_StateIdT __start, size_t __size)
 	{
 	  _M_head._M_state = __start;
-	  _M_head._M_parens.clear();
-	  _M_head._M_parens.resize(__size);
+	  _M_head._M_captures.clear();
+	  _M_head._M_captures.resize(__size);
 	}
 
 	_Match_head&
@@ -441,7 +441,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 	void
 	_M_get_result(_Captures& __result)
-	{ __result = std::move(_M_head._M_parens); }
+	{ __result = std::move(_M_head._M_captures); }
 
 	void
 	_M_update(const _Captures& __captures) { }
@@ -456,8 +456,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	void _M_reset(_StateIdT __start, size_t __size)
 	{
 	  _M_head._M_state = __start;
-	  _M_head._M_parens.clear();
-	  _M_head._M_parens.resize(__size);
+	  _M_head._M_captures.clear();
+	  _M_head._M_captures.resize(__size);
 	  _M_result.clear();
 	}
 
@@ -549,22 +549,22 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _M_handle_accept(const _State<_Traits>& __state, _Match_head& __head);
 
 	  void
-	  _M_handle(const _Saved_state& __save, _Match_head& __head)
+	  _M_restore(const _Saved_state& __save, _Match_head& __head)
 	  {
 	    __head._M_state = __save._M_state;
 	    _M_dfs<_Dfs_executer>(*this, __head);
 	  }
 
 	  void
-	  _M_handle(const _Saved_paren& __save, _Match_head& __head)
-	  { __head._M_parens[__save._M_index] = std::move(__save._M_paren); }
+	  _M_restore(const _Saved_capture& __save, _Match_head& __head)
+	  { __head._M_captures[__save._M_index] = std::move(__save._M_capture); }
 
 	  void
-	  _M_handle(const _Saved_position& __save, _Match_head& __head)
+	  _M_restore(const _Saved_position& __save, _Match_head& __head)
 	  { _M_context._M_current = std::move(__save._M_position); }
 
 	  void
-	  _M_handle(const _Saved_dfs_repeat& __save, _Match_head& __head)
+	  _M_restore(const _Saved_dfs_repeat& __save, _Match_head& __head)
 	  {
 	    _M_last = __save._M_last;
 	    _M_context._M_current = __save._M_current;
@@ -624,7 +624,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	_M_visit_impl(_StateIdT __state_id, _Match_head& __head)
 	{
 	  _M_is_visited[__state_id] = true;
-	  _M_current_positions[__state_id] = __head._M_parens;
+	  _M_current_positions[__state_id] = __head._M_captures;
 	}
 
       private:
@@ -708,19 +708,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _M_search_from_first_impl();
 
 	  void
-	  _M_handle(const _Saved_state& __save, _Match_head& __head)
+	  _M_restore(const _Saved_state& __save, _Match_head& __head)
 	  {
 	    __head._M_state = __save._M_state;
 	    _M_dfs<_Bfs_executer>(*this, __head);
 	  }
 
 	  void
-	  _M_handle(const _Saved_paren& __save, _Match_head& __head)
-	  { __head._M_parens[__save._M_index] = std::move(__save._M_paren); }
-
-	  void
-	  _M_handle(const _Saved_position& __save, _Match_head& __head)
-	  { _M_context._M_current = std::move(__save._M_position); }
+	  _M_restore(const _Saved_capture& __save, _Match_head& __head)
+	  { __head._M_captures[__save._M_index] = std::move(__save._M_capture); }
 
 	  _Context<_Traits> _M_context;
 	  std::vector<_Match_head> _M_heads;
