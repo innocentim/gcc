@@ -53,6 +53,7 @@
 #include <vector>
 #include <map>
 #include <cstring>
+#include <mutex>
 
 #include <ext/aligned_buffer.h>
 #include <bits/regex_constants.h>

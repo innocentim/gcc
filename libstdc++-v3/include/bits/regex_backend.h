@@ -123,7 +123,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   inline _Dynamic_stack&
   __get_dynamic_stack()
   {
-    thread_local _Dynamic_stack __stack;
+    static _Dynamic_stack __stack;
     return __stack;
   }
 

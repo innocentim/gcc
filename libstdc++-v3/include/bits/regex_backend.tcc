@@ -731,12 +731,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    && !__nfa._M_has_backref);
       bool __is_ecma = __nfa._M_options() & regex_constants::ECMAScript;
       bool __ret;
+      static std::mutex __mutex;
 #define _RUN(_Executer_type, __IS_ECMA) \
 	do \
 	  { \
+	    __mutex.lock(); \
 	    _Executer_type<_Traits, __IS_ECMA> __executer; \
 	    __executer._M_get_context()._M_init(__s, __e, __nfa, __flags, __search_mode); \
 	    __ret = __match(__executer, __res); \
+	    __mutex.unlock(); \
 	  } \
 	while (false)
       if (!__use_bfs && __is_ecma)
