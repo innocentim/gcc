@@ -16807,6 +16807,12 @@ The following built-in function is always available.
 @item void __builtin_ia32_pause (void)
 Generates the @code{pause} machine instruction with a compiler memory
 barrier.
+
+@item void *__builtin_stack_top (void)
+This function is similar to calling @code{__builtin_frame_address}
+with a value of @code{0}, but it returns the stack address when the
+function is called.  Unlike @code{__builtin_frame_address}, the frame
+pointer register isn't required.
 @end table
 
 The following floating-point built-in functions are made available in the

@@ -2492,6 +2492,10 @@ struct GTY(()) machine_function {
   /* If true, it is safe to not save/restore DRAP register.  */
   BOOL_BITFIELD no_drap_save_restore : 1;
 
+  /* If true, the stack address of the current function has been
+     taken.  */
+  BOOL_BITFIELD stack_top_taken : 1;
+
   /* If true, there is register available for argument passing.  This
      is used only in ix86_function_ok_for_sibcall by 32-bit to determine
      if there is scratch register available for indirect sibcall.  In

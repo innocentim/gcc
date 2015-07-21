@@ -11575,6 +11575,12 @@ ix86_expand_prologue (void)
     {
       int align_bytes = crtl->stack_alignment_needed / BITS_PER_UNIT;
 
+      /* Can't use DRAP if the stack address has been taken.  */
+      if (cfun->machine->stack_top_taken)
+	sorry ("%<__builtin_stack_top%> not supported with stack"
+	       " realignment.  This may be worked around by adding"
+	       " -maccumulate-outgoing-args.");
+
       /* Only need to push parameter pointer reg if it is caller saved.  */
       if (!call_used_regs[REGNO (crtl->drap_reg)])
 	{
@@ -30741,6 +30747,9 @@ enum ix86_builtins
   IX86_BUILTIN_READ_FLAGS,
   IX86_BUILTIN_WRITE_FLAGS,
 
+  /* Get the stack address when the function is called.  */
+  IX86_BUILTIN_STACK_TOP,
+
   IX86_BUILTIN_MAX
 };
 
@@ -34352,6 +34361,10 @@ ix86_init_mmx_sse_builtins (void)
 	       VOID_FTYPE_PCVOID_UNSIGNED_UNSIGNED, IX86_BUILTIN_MONITORX);
   def_builtin (OPTION_MASK_ISA_MWAITX, "__builtin_ia32_mwaitx",
 	       VOID_FTYPE_UNSIGNED_UNSIGNED_UNSIGNED, IX86_BUILTIN_MWAITX);
+
+  /* Get the stack address when the function is called.  */
+  def_builtin (0, "__builtin_stack_top",
+	       PVOID_FTYPE_VOID, IX86_BUILTIN_STACK_TOP);
 
   /* Add FMA4 multi-arg argument instructions */
   for (i = 0, d = bdesc_multi_arg; i < ARRAY_SIZE (bdesc_multi_arg); i++, d++)
@@ -40227,6 +40240,21 @@ addcarryx:
 	}
       emit_insn (gen_xabort (op0));
       return 0;
+
+    case IX86_BUILTIN_STACK_TOP:
+      cfun->machine->stack_top_taken = true;
+
+      if (!target
+	  || GET_MODE (target) != Pmode
+	  || !register_operand (target, Pmode))
+	target = gen_reg_rtx (Pmode);
+
+      /* After the prologue, stack top is at -WORD(AP) in the current
+	 frame.  */
+      emit_insn (gen_rtx_SET (target,
+			      plus_constant (Pmode, arg_pointer_rtx,
+					     -UNITS_PER_WORD)));
+      return target;
 
     default:
       break;
