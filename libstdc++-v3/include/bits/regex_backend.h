@@ -593,7 +593,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{ std::fill_n(_M_is_visited.begin(), _M_is_visited.size(), false); }
 
 	bool
-	_M_visited_impl(_StateIdT __state_id, _Match_head& __head);
+	_M_visited_impl(_StateIdT __state_id, _Match_head& __head)
+	{ return _M_is_visited[__state_id]; }
 
 	void
 	_M_visit_impl(_StateIdT __state_id, _Match_head& __head)
@@ -618,7 +619,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{ std::fill_n(_M_is_visited.begin(), _M_is_visited.size(), false); }
 
 	bool
-	_M_visited_impl(_StateIdT __state_id, _Match_head& __head);
+	_M_visited_impl(_StateIdT __state_id, _Match_head& __head)
+	{
+	  if (_M_is_visited[__state_id])
+	    if (!_M_leftmost_longest(__head._M_captures, _M_current_positions[__state_id]))
+	      return true;
+	  return false;
+	}
 
 	void
 	_M_visit_impl(_StateIdT __state_id, _Match_head& __head)

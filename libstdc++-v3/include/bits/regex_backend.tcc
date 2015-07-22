@@ -496,23 +496,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 
   template<typename _Bi_iter>
-    inline bool
-    _Regex_scope<_Bi_iter>::_Bfs_ecma_mixin::
-    _M_visited_impl(_StateIdT __state_id, _Match_head& __head)
-    { return _M_is_visited[__state_id]; }
-
-  template<typename _Bi_iter>
-    inline bool
-    _Regex_scope<_Bi_iter>::_Bfs_posix_mixin::
-    _M_visited_impl(_StateIdT __state_id, _Match_head& __head)
-    {
-      if (_M_is_visited[__state_id])
-	if (!_M_leftmost_longest(__head._M_captures, _M_current_positions[__state_id]))
-	  return true;
-      return false;
-    }
-
-  template<typename _Bi_iter>
   template<typename _Traits, bool __is_ecma>
     inline bool
     _Regex_scope<_Bi_iter>::_Bfs_executer<_Traits, __is_ecma>::
