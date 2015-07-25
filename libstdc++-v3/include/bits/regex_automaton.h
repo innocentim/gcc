@@ -210,7 +210,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _M_sub_count() const
     { return _M_subexpr_count; }
 
-    std::vector<size_t>       _M_paren_stack;
     _FlagT                    _M_flags;
     _StateIdT                 _M_start_state;
     _SizeT                    _M_subexpr_count;
@@ -275,18 +274,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_insert_subexpr_begin()
       {
 	auto __id = this->_M_subexpr_count++;
-	this->_M_paren_stack.push_back(__id);
 	_StateT __tmp(_S_opcode_subexpr_begin);
 	__tmp._M_subexpr = __id;
 	return _M_insert_state(std::move(__tmp));
       }
 
       _StateIdT
-      _M_insert_subexpr_end()
+      _M_insert_subexpr_end(size_t __paren_index)
       {
 	_StateT __tmp(_S_opcode_subexpr_end);
-	__tmp._M_subexpr = this->_M_paren_stack.back();
-	this->_M_paren_stack.pop_back();
+	__tmp._M_subexpr = __paren_index;
 	return _M_insert_state(std::move(__tmp));
       }
 

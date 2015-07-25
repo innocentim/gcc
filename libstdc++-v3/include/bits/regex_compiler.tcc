@@ -78,13 +78,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_ctype(std::use_facet<_CtypeT>(__loc))
     {
       _StateSeqT __r(*_M_nfa, _M_nfa->_M_start());
-      __r._M_append(_M_nfa->_M_insert_subexpr_begin());
+      __r._M_append(_M_subexpr_begin());
       this->_M_disjunction();
       if (!_M_match_token(_ScannerT::_S_token_eof))
 	__throw_regex_error(regex_constants::error_paren);
       __r._M_append(_M_pop());
       _GLIBCXX_DEBUG_ASSERT(_M_stack.empty());
-      __r._M_append(_M_nfa->_M_insert_subexpr_end());
+      __r._M_append(_M_subexpr_end());
       __r._M_append(_M_nfa->_M_insert_accept());
       _M_nfa->_M_eliminate_dummy();
     }
@@ -313,8 +313,21 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       else if (_M_try_char())
 	__INSERT_REGEX_MATCHER(_M_insert_char_matcher);
       else if (_M_match_token(_ScannerT::_S_token_backref))
-	_M_stack.push(_StateSeqT(*_M_nfa, _M_nfa->
-				 _M_insert_backref(_M_cur_int_value(10))));
+	{
+	  // To figure out whether a backref is valid, a stack is used to store
+	  // unfinished sub-expressions. For example, when parsing
+	  // "(a(b)(c\\1(d)))" at '\\1', _M_subexpr_count is 3, indicating that
+	  // 3 sub expressions are parsed or partially parsed(in the stack),
+	  // aka, "(a..", "(b)" and "(c..").
+	  // _M_paren_stack is {1, 3}, for incomplete "(a.." and "(c..". At this
+	  // time, "\\2" is valid, but "\\1" and "\\3" are not.
+	  auto __index = _M_cur_int_value(10);
+	  for (auto __it : this->_M_paren_stack)
+	    if (__index == __it)
+	      __throw_regex_error(regex_constants::error_backref);
+	  _M_stack.push(_StateSeqT(*_M_nfa,
+				   _M_nfa->_M_insert_backref(__index)));
+	}
       else if (_M_match_token(_ScannerT::_S_token_quoted_class))
 	__INSERT_REGEX_MATCHER(_M_insert_character_class_matcher);
       else if (_M_match_token(_ScannerT::_S_token_subexpr_no_group_begin))
@@ -328,12 +341,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
       else if (_M_match_token(_ScannerT::_S_token_subexpr_begin))
 	{
-	  _StateSeqT __r(*_M_nfa, _M_nfa->_M_insert_subexpr_begin());
+	  _StateSeqT __r(*_M_nfa, _M_subexpr_begin());
 	  this->_M_disjunction();
 	  if (!_M_match_token(_ScannerT::_S_token_subexpr_end))
 	    __throw_regex_error(regex_constants::error_paren);
 	  __r._M_append(_M_pop());
-	  __r._M_append(_M_nfa->_M_insert_subexpr_end());
+	  __r._M_append(_M_subexpr_end());
 	  _M_stack.push(__r);
 	}
       else if (!_M_bracket_expression())

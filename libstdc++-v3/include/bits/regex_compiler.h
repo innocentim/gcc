@@ -138,10 +138,27 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	return ret;
       }
 
+      _StateIdT
+      _M_subexpr_begin()
+      {
+	_M_paren_stack.push_back(_M_nfa->_M_sub_count());
+	auto __ret = _M_nfa->_M_insert_subexpr_begin();
+	return __ret;
+      }
+
+      _StateIdT
+      _M_subexpr_end()
+      {
+	auto __ret = _M_nfa->_M_insert_subexpr_end(_M_paren_stack.back());
+	_M_paren_stack.pop_back();
+	return __ret;
+      }
+
       _FlagT              _M_flags;
       _ScannerT           _M_scanner;
       shared_ptr<_RegexT> _M_nfa;
       _StringT            _M_value;
+      std::vector<size_t> _M_paren_stack;
       _StackT             _M_stack;
       const _TraitsT&     _M_traits;
       const _CtypeT&      _M_ctype;
