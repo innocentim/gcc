@@ -209,7 +209,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Bi_iter>
     struct _Regex_scope
     {
-      using _Char = typename iterator_traits<_Bi_iter>::value_type;
+      using _Char_type = typename iterator_traits<_Bi_iter>::value_type;
 
       class _Capture
       {
@@ -365,14 +365,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _M_traits() const
 	  { return _M_nfa->_M_traits; }
 
-	  const _State<_Traits>&
+	  const _State<_Char_type>&
 	  _M_get_state(_StateIdT __state_id) const
 	  { return (*_M_nfa)[__state_id]; }
 
 	  bool
-	  _M_is_word(_Char __ch) const
+	  _M_is_word(_Char_type __ch) const
 	  {
-	    static const _Char __s[2] = { 'w' };
+	    static const _Char_type __s[2] = { 'w' };
 	    return _M_traits().isctype
 	      (__ch, _M_traits().lookup_classname(__s, __s+1));
 	  }
@@ -395,35 +395,35 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       template<typename _Traits>
 	static bool
-	_M_handle_subexpr_begin_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head);
+	_M_handle_subexpr_begin_common(_Context<_Traits>& __context, const _State<_Char_type>& __state, _Match_head& __head);
 
       template<typename _Traits>
 	static bool
-	_M_handle_subexpr_end_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head);
+	_M_handle_subexpr_end_common(_Context<_Traits>& __context, const _State<_Char_type>& __state, _Match_head& __head);
 
       template<typename _Traits>
 	static bool
-	_M_handle_alternative_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head);
+	_M_handle_alternative_common(_Context<_Traits>& __context, const _State<_Char_type>& __state, _Match_head& __head);
 
       template<typename _Traits>
 	static bool
-	_M_handle_line_begin_assertion_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head);
+	_M_handle_line_begin_assertion_common(_Context<_Traits>& __context, const _State<_Char_type>& __state, _Match_head& __head);
 
       template<typename _Traits>
 	static bool
-	_M_handle_line_end_assertion_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head);
+	_M_handle_line_end_assertion_common(_Context<_Traits>& __context, const _State<_Char_type>& __state, _Match_head& __head);
 
       template<typename _Traits>
 	static bool
-	_M_handle_word_boundary_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head);
+	_M_handle_word_boundary_common(_Context<_Traits>& __context, const _State<_Char_type>& __state, _Match_head& __head);
 
       template<typename _Executer, typename _Traits>
 	static bool
-	_M_handle_subexpr_lookahead_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head);
+	_M_handle_subexpr_lookahead_common(_Context<_Traits>& __context, const _State<_Char_type>& __state, _Match_head& __head);
 
       template<typename _Traits>
 	static void
-	_M_handle_accept_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head);
+	_M_handle_accept_common(_Context<_Traits>& __context, const _State<_Char_type>& __state, _Match_head& __head);
 
       class _Dfs_ecma_mixin
       {
@@ -510,43 +510,43 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  { }
 
 	  bool
-	  _M_handle_repeat(const _State<_Traits>& __state, _Match_head& __head);
+	  _M_handle_repeat(const _State<_Char_type>& __state, _Match_head& __head);
 
 	  bool
-	  _M_handle_subexpr_begin(const _State<_Traits>& __state, _Match_head& __head)
+	  _M_handle_subexpr_begin(const _State<_Char_type>& __state, _Match_head& __head)
 	  { return _M_handle_subexpr_begin_common(_M_context, __state, __head); }
 
 	  bool
-	  _M_handle_subexpr_end(const _State<_Traits>& __state, _Match_head& __head)
+	  _M_handle_subexpr_end(const _State<_Char_type>& __state, _Match_head& __head)
 	  { return _M_handle_subexpr_end_common(_M_context, __state, __head); }
 
 	  bool
-	  _M_handle_alternative(const _State<_Traits>& __state, _Match_head& __head);
+	  _M_handle_alternative(const _State<_Char_type>& __state, _Match_head& __head);
 
 	  bool
-	  _M_handle_line_begin_assertion(const _State<_Traits>& __state, _Match_head& __head)
+	  _M_handle_line_begin_assertion(const _State<_Char_type>& __state, _Match_head& __head)
 	  { return _M_handle_line_begin_assertion_common(_M_context, __state, __head); }
 
 	  bool
-	  _M_handle_line_end_assertion(const _State<_Traits>& __state, _Match_head& __head)
+	  _M_handle_line_end_assertion(const _State<_Char_type>& __state, _Match_head& __head)
 	  { return _M_handle_line_end_assertion_common(_M_context, __state, __head); }
 
 	  bool
-	  _M_handle_word_boundary(const _State<_Traits>& __state, _Match_head& __head)
+	  _M_handle_word_boundary(const _State<_Char_type>& __state, _Match_head& __head)
 	  { return _M_handle_word_boundary_common(_M_context, __state, __head); }
 
 	  bool
-	  _M_handle_subexpr_lookahead(const _State<_Traits>& __state, _Match_head& __head)
+	  _M_handle_subexpr_lookahead(const _State<_Char_type>& __state, _Match_head& __head)
 	  { return _M_handle_subexpr_lookahead_common<_Dfs_executer>(_M_context, __state, __head); }
 
 	  bool
-	  _M_handle_match(const _State<_Traits>& __state, _Match_head& __head);
+	  _M_handle_match(const _State<_Char_type>& __state, _Match_head& __head);
 
 	  bool
-	  _M_handle_backref(const _State<_Traits>& __state, _Match_head& __head);
+	  _M_handle_backref(const _State<_Char_type>& __state, _Match_head& __head);
 
 	  bool
-	  _M_handle_accept(const _State<_Traits>& __state, _Match_head& __head);
+	  _M_handle_accept(const _State<_Char_type>& __state, _Match_head& __head);
 
 	  void
 	  _M_restore(const _Saved_state& __save, _Match_head& __head)
@@ -668,47 +668,47 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  { return this->_M_visit_impl(__state_id, __head); }
 
 	  bool
-	  _M_handle_repeat(const _State<_Traits>& __state, _Match_head& __head);
+	  _M_handle_repeat(const _State<_Char_type>& __state, _Match_head& __head);
 
 	  bool
-	  _M_handle_subexpr_begin(const _State<_Traits>& __state, _Match_head& __head)
+	  _M_handle_subexpr_begin(const _State<_Char_type>& __state, _Match_head& __head)
 	  { return _M_handle_subexpr_begin_common(_M_context, __state, __head); }
 
 	  bool
-	  _M_handle_subexpr_end(const _State<_Traits>& __state, _Match_head& __head)
+	  _M_handle_subexpr_end(const _State<_Char_type>& __state, _Match_head& __head)
 	  { return _M_handle_subexpr_end_common(_M_context, __state, __head); }
 
 	  bool
-	  _M_handle_alternative(const _State<_Traits>& __state, _Match_head& __head);
+	  _M_handle_alternative(const _State<_Char_type>& __state, _Match_head& __head);
 
 	  bool
-	  _M_handle_line_begin_assertion(const _State<_Traits>& __state, _Match_head& __head)
+	  _M_handle_line_begin_assertion(const _State<_Char_type>& __state, _Match_head& __head)
 	  { return _M_handle_line_begin_assertion_common(_M_context, __state, __head); }
 
 	  bool
-	  _M_handle_line_end_assertion(const _State<_Traits>& __state, _Match_head& __head)
+	  _M_handle_line_end_assertion(const _State<_Char_type>& __state, _Match_head& __head)
 	  { return _M_handle_line_end_assertion_common(_M_context, __state, __head); }
 
 	  bool
-	  _M_handle_word_boundary(const _State<_Traits>& __state, _Match_head& __head)
+	  _M_handle_word_boundary(const _State<_Char_type>& __state, _Match_head& __head)
 	  { return _M_handle_word_boundary_common(_M_context, __state, __head); }
 
 	  bool
-	  _M_handle_subexpr_lookahead(const _State<_Traits>& __state, _Match_head& __head)
+	  _M_handle_subexpr_lookahead(const _State<_Char_type>& __state, _Match_head& __head)
 	  { return _M_handle_subexpr_lookahead_common<_Bfs_executer>(_M_context, __state, __head); }
 
 	  bool
-	  _M_handle_match(const _State<_Traits>& __state, const _Match_head& __head);
+	  _M_handle_match(const _State<_Char_type>& __state, const _Match_head& __head);
 
 	  bool
-	  _M_handle_backref(const _State<_Traits>& __state, _Match_head& __head)
+	  _M_handle_backref(const _State<_Char_type>& __state, _Match_head& __head)
 	  {
 	    _GLIBCXX_DEBUG_ASSERT(false);
 	    return false;
 	  }
 
 	  bool
-	  _M_handle_accept(const _State<_Traits>& __state, _Match_head& __head);
+	  _M_handle_accept(const _State<_Char_type>& __state, _Match_head& __head);
 
 	private:
 	  bool

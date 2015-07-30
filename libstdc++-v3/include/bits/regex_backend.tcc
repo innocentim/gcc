@@ -156,7 +156,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    return;
 	  __executer._M_visit(__head._M_state, __head);
 	  const auto& __state = __executer._M_get_context()._M_get_state(__head._M_state);
-	  switch (__state._M_opcode)
+	  switch (__state._M_opcode())
 	    {
 #define _DFS_DISPATCH_ENTRY(__opcode, __func_name) \
 	    case __opcode: \
@@ -189,7 +189,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Traits>
     inline bool
     _Regex_scope<_Bi_iter>::
-    _M_handle_subexpr_begin_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head)
+    _M_handle_subexpr_begin_common(_Context<_Traits>& __context, const _State<_Char_type>& __state, _Match_head& __head)
     {
       auto& __capture = __head._M_captures[__state._M_subexpr];
       __context._M_stack._M_push(_Saved_capture(__state._M_subexpr, __capture));
@@ -202,7 +202,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Traits>
     inline bool
     _Regex_scope<_Bi_iter>::
-    _M_handle_subexpr_end_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head)
+    _M_handle_subexpr_end_common(_Context<_Traits>& __context, const _State<_Char_type>& __state, _Match_head& __head)
     {
       auto& __capture = __head._M_captures[__state._M_subexpr];
       __context._M_stack._M_push(_Saved_capture(__state._M_subexpr, __capture));
@@ -215,7 +215,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Traits>
     inline bool
     _Regex_scope<_Bi_iter>::
-    _M_handle_alternative_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head)
+    _M_handle_alternative_common(_Context<_Traits>& __context, const _State<_Char_type>& __state, _Match_head& __head)
     {
       __context._M_stack._M_push(_Saved_state(__state._M_next));
       __head._M_state = __state._M_alt;
@@ -226,7 +226,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Traits>
     inline bool
     _Regex_scope<_Bi_iter>::
-    _M_handle_line_begin_assertion_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head)
+    _M_handle_line_begin_assertion_common(_Context<_Traits>& __context, const _State<_Char_type>& __state, _Match_head& __head)
     {
       if (__context._M_current == __context._M_begin
 	  && !(__context._M_flags & (regex_constants::match_not_bol | regex_constants::match_prev_avail)))
@@ -241,7 +241,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Traits>
     inline bool
     _Regex_scope<_Bi_iter>::
-    _M_handle_line_end_assertion_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head)
+    _M_handle_line_end_assertion_common(_Context<_Traits>& __context, const _State<_Char_type>& __state, _Match_head& __head)
     {
       if (__context._M_current == __context._M_end && !(__context._M_flags & regex_constants::match_not_eol))
 	{
@@ -255,7 +255,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Traits>
     inline bool
     _Regex_scope<_Bi_iter>::
-    _M_handle_word_boundary_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head)
+    _M_handle_word_boundary_common(_Context<_Traits>& __context, const _State<_Char_type>& __state, _Match_head& __head)
     {
       if (__context._M_word_boundary() == !__state._M_neg)
 	{
@@ -269,7 +269,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Executer, typename _Traits>
     inline bool
     _Regex_scope<_Bi_iter>::
-    _M_handle_subexpr_lookahead_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head)
+    _M_handle_subexpr_lookahead_common(_Context<_Traits>& __context, const _State<_Char_type>& __state, _Match_head& __head)
     {
       _Executer __executer;
       __executer._M_get_context()._M_init(__context._M_current, __context._M_end, *__context._M_nfa, __context._M_flags, __context._M_search_mode);
@@ -298,7 +298,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Traits>
     inline void
     _Regex_scope<_Bi_iter>::
-    _M_handle_accept_common(_Context<_Traits>& __context, const _State<_Traits>& __state, _Match_head& __head)
+    _M_handle_accept_common(_Context<_Traits>& __context, const _State<_Char_type>& __state, _Match_head& __head)
     {
       if (!__head._M_found)
 	{
@@ -394,7 +394,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Traits, bool __is_ecma>
     inline bool
     _Regex_scope<_Bi_iter>::_Dfs_executer<_Traits, __is_ecma>::
-    _M_handle_repeat(const _State<_Traits>& __state, _Match_head& __head)
+    _M_handle_repeat(const _State<_Char_type>& __state, _Match_head& __head)
     {
       const auto& __current = _M_context._M_current;
       if (_M_last.first == 2 && _M_last.second == __current)
@@ -422,7 +422,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Traits, bool __is_ecma>
     inline bool
     _Regex_scope<_Bi_iter>::_Dfs_executer<_Traits, __is_ecma>::
-    _M_handle_alternative(const _State<_Traits>& __state, _Match_head& __head)
+    _M_handle_alternative(const _State<_Char_type>& __state, _Match_head& __head)
     {
       _M_push<_Saved_state>(__state._M_next);
       this->_M_push<_Saved_position>(_M_context._M_current);
@@ -434,7 +434,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Traits, bool __is_ecma>
     inline bool
     _Regex_scope<_Bi_iter>::_Dfs_executer<_Traits, __is_ecma>::
-    _M_handle_match(const _State<_Traits>& __state, _Match_head& __head)
+    _M_handle_match(const _State<_Char_type>& __state, _Match_head& __head)
     {
       if (_M_context._M_end == _M_context._M_current)
 	return false;
@@ -451,7 +451,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Traits, bool __is_ecma>
     inline bool
     _Regex_scope<_Bi_iter>::_Dfs_executer<_Traits, __is_ecma>::
-    _M_handle_backref(const _State<_Traits>& __state, _Match_head& __head)
+    _M_handle_backref(const _State<_Char_type>& __state, _Match_head& __head)
     {
       const auto& __capture = __head._M_captures[__state._M_backref_index];
       if (!__capture._M_matched())
@@ -487,7 +487,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Traits, bool __is_ecma>
     inline bool
     _Regex_scope<_Bi_iter>::_Dfs_executer<_Traits, __is_ecma>::
-    _M_handle_accept(const _State<_Traits>& __state, _Match_head& __head)
+    _M_handle_accept(const _State<_Char_type>& __state, _Match_head& __head)
     {
       _M_handle_accept_common(_M_context, __state, __head);
       if (__head._M_found)
@@ -572,7 +572,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Traits, bool __is_ecma>
     inline bool
     _Regex_scope<_Bi_iter>::_Bfs_executer<_Traits, __is_ecma>::
-    _M_handle_repeat(const _State<_Traits>& __state, _Match_head& __head)
+    _M_handle_repeat(const _State<_Char_type>& __state, _Match_head& __head)
     {
       _StateIdT __first = __state._M_alt, __second = __state._M_next;
       if (__state._M_neg)
@@ -586,7 +586,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Traits, bool __is_ecma>
     inline bool
     _Regex_scope<_Bi_iter>::_Bfs_executer<_Traits, __is_ecma>::
-    _M_handle_alternative(const _State<_Traits>& __state, _Match_head& __head)
+    _M_handle_alternative(const _State<_Char_type>& __state, _Match_head& __head)
     {
       _M_push<_Saved_state>(__state._M_next);
       __head._M_state = __state._M_alt;
@@ -597,7 +597,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Traits, bool __is_ecma>
     inline bool
     _Regex_scope<_Bi_iter>::_Bfs_executer<_Traits, __is_ecma>::
-    _M_handle_match(const _State<_Traits>& __state, const _Match_head& __head)
+    _M_handle_match(const _State<_Char_type>& __state, const _Match_head& __head)
     {
       if (_M_context._M_end == _M_context._M_current)
 	return false;
@@ -614,7 +614,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Traits, bool __is_ecma>
     inline bool
     _Regex_scope<_Bi_iter>::_Bfs_executer<_Traits, __is_ecma>::
-    _M_handle_accept(const _State<_Traits>& __state, _Match_head& __head)
+    _M_handle_accept(const _State<_Char_type>& __state, _Match_head& __head)
     {
       _M_handle_accept_common(_M_context, __state, __head);
       if (__head._M_found)
