@@ -108,7 +108,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  // alternative before right one.
 	  _M_stack.push(_StateSeqT(*_M_nfa,
 				   _M_nfa->_M_insert_alt(
-				     __alt2._M_start, __alt1._M_start, false),
+				     __alt2._M_start, __alt1._M_start),
 				   __end));
 	}
     }
@@ -208,11 +208,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  __init();
 	  auto __e = _M_pop();
 	  auto __end = _M_nfa->_M_insert_dummy();
-	  _StateSeqT __r(*_M_nfa,
-			 _M_nfa->_M_insert_repeat(_S_invalid_state_id,
-						  __e._M_start, __neg));
+	  auto __alt = _M_nfa->_M_insert_alt(_S_invalid_state_id, __e._M_start);
+	  _StateSeqT __r(*_M_nfa, __alt);
 	  __e._M_append(__end);
 	  __r._M_append(__end);
+	  if (__neg)
+	    std::swap((*_M_nfa)[__alt]._M_next, (*_M_nfa)[__alt]._M_alt);
 	  _M_stack.push(__r);
 	}
       else if (_M_match_token(_ScannerT::_S_token_interval_begin))
@@ -257,24 +258,33 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	      if (__n < 0)
 		__throw_regex_error(regex_constants::error_badbrace);
 	      auto __end = _M_nfa->_M_insert_dummy();
-	      // _M_alt is the "match more" branch, and _M_next is the
-	      // "match less" one. Switch _M_alt and _M_next of all created
-	      // nodes. This is a hack but IMO works well.
-	      std::stack<_StateIdT> __stack;
-	      for (long __i = 0; __i < __n; ++__i)
+	      if (__neg)
 		{
-		  auto __tmp = __r._M_clone();
-		  auto __alt = _M_nfa->_M_insert_repeat(__tmp._M_start,
-							__end, __neg);
-		  __stack.push(__alt);
-		  __e._M_append(_StateSeqT(*_M_nfa, __alt, __tmp._M_end));
+		  for (long __i = 0; __i < __n; ++__i)
+		    {
+		      auto __tmp = __r._M_clone();
+		      auto __alt = _M_nfa->_M_insert_alt(__tmp._M_start, __end);
+		      __e._M_append(_StateSeqT(*_M_nfa, __alt, __tmp._M_end));
+		    }
+		  __e._M_append(__end);
 		}
-	      __e._M_append(__end);
-	      while (!__stack.empty())
+	      else
 		{
-		  auto& __tmp = (*_M_nfa)[__stack.top()];
-		  __stack.pop();
-		  std::swap(__tmp._M_next, __tmp._M_alt);
+		  // _M_alt is the "match more" branch, and _M_next is the
+		  // "match less" one. Switch _M_alt and _M_next of all created
+		  // nodes. This is a hack but IMO works well.
+		  std::vector<_StateIdT> __states;
+		  for (long __i = 0; __i < __n; ++__i)
+		    {
+		      auto __tmp = __r._M_clone();
+		      auto __alt = _M_nfa->_M_insert_alt(__tmp._M_start, __end);
+		      __states.push_back(__alt);
+		      __e._M_append(_StateSeqT(*_M_nfa, __alt, __tmp._M_end));
+		    }
+		  __e._M_append(__end);
+		  for (auto __state : __states)
+		    std::swap((*_M_nfa)[__state]._M_next,
+			      (*_M_nfa)[__state]._M_alt);
 		}
 	    }
 	  _M_stack.push(__e);

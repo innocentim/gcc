@@ -86,6 +86,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	// for _S_opcode_alternative, _S_opcode_repeat and
 	// _S_opcode_subexpr_lookahead
 	_StateIdT  _M_alt;
+
+	// for _S_opcode_repeat
+	size_t     _M_repeat_index;
+
 	// for _S_opcode_word_boundary or _S_opcode_subexpr_lookahead or
 	// quantifiers (ungreedy if set true)
 	bool       _M_neg;
@@ -189,7 +193,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     explicit
     _NFA_base(_FlagT __f)
     : _M_flags(__f), _M_start_state(0), _M_subexpr_count(0),
-    _M_has_backref(false)
+    _M_repeat_count(0), _M_has_backref(false)
     { }
 
     _NFA_base(_NFA_base&&) = default;
@@ -213,6 +217,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _FlagT                    _M_flags;
     _StateIdT                 _M_start_state;
     _SizeT                    _M_subexpr_count;
+    _SizeT                    _M_repeat_count;
     bool                      _M_has_backref;
   };
 
@@ -240,7 +245,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       }
 
       _StateIdT
-      _M_insert_alt(_StateIdT __next, _StateIdT __alt, bool __neg)
+      _M_insert_alt(_StateIdT __next, _StateIdT __alt)
       {
 	_StateT __tmp(_S_opcode_alternative);
 	// It labels every quantifier to make greedy comparison easier in BFS
