@@ -455,7 +455,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       const auto& __capture = __head._M_captures[__state._M_backref_index];
       if (!__capture._M_matched())
-	return false;
+	{
+	  __head._M_state = __state._M_next;
+	  return true;
+	}
 
       auto& __current = _M_context._M_current;
       auto __new_current = __current;
