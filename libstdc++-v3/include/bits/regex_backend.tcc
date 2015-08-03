@@ -317,7 +317,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _Regex_scope<_Bi_iter>::_Dfs_executer<_Traits, __is_ecma>::
     _M_search_from_first(_StateIdT __start, _Captures& __result)
     {
-      _M_last.first = 0;
+      _M_last.first = _S_invalid_state_id;
       this->_M_reset(__start, _M_context._M_nfa->_M_sub_count());
       _M_exec(this->_M_get_head());
       if (this->_M_get_head()._M_found)
@@ -343,14 +343,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  while (__stack._M_top() != __old_top)
 	    switch (__stack.template _M_top_item<_Saved_tag>()._M_tag)
 	      {
-	      case _Saved_tag::_S_saved_state:
-		__stack.template _M_pop<_Saved_state>(); break;
 	      case _Saved_tag::_S_saved_capture:
 		__stack.template _M_pop<_Saved_capture>(); break;
-	      case _Saved_tag::_S_saved_position:
-		__stack.template _M_pop<_Saved_position>(); break;
 	      case _Saved_tag::_S_saved_dfs_repeat:
 		__stack.template _M_pop<_Saved_dfs_repeat>(); break;
+	      case _Saved_tag::_S_saved_dfs_neg_repeat:
+		__stack.template _M_pop<_Saved_dfs_neg_repeat>(); break;
+	      case _Saved_tag::_S_saved_last:
+		__stack.template _M_pop<_Saved_last>(); break;
 	      default: _GLIBCXX_DEBUG_ASSERT(false);
 	      };
       };
@@ -358,7 +358,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       void* __top = __stack._M_top();
       __try
 	{
-	  _M_restore(_Saved_state(__head._M_state), __head);
+	  __head._M_state = __head._M_state;
+	  _M_dfs(*this, __head);
 	  while (__stack._M_top() != __top)
 	    {
 	      if (__is_ecma && __head._M_found)
@@ -368,17 +369,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		}
 	      switch (__stack.template _M_top_item<_Saved_tag>()._M_tag)
 		{
-#define __HANDLE(_Type) \
-		    {\
-		      auto __save = std::move(__stack.template _M_top_item<_Type>());\
-		      __stack.template _M_pop<_Type>();\
-		      _M_restore(__save, __head);\
-		    }
-		case _Saved_tag::_S_saved_state: __HANDLE(_Saved_state); break;
-		case _Saved_tag::_S_saved_capture: __HANDLE(_Saved_capture); break;
-		case _Saved_tag::_S_saved_position: __HANDLE(_Saved_position); break;
-		case _Saved_tag::_S_saved_dfs_repeat: __HANDLE(_Saved_dfs_repeat); break;
-#undef __HANDLE
+		case _Saved_tag::_S_saved_capture: _M_restore_capture(__stack, __head); break;
+		case _Saved_tag::_S_saved_dfs_repeat: _M_restore_dfs_repeat(__stack, __head); break;
+		case _Saved_tag::_S_saved_dfs_neg_repeat: _M_restore_dfs_neg_repeat(__stack, __head); break;
+		case _Saved_tag::_S_saved_last: _M_restore_last(__stack, __head); break;
 		default: _GLIBCXX_DEBUG_ASSERT(false);
 		};
 	    }
@@ -397,24 +391,20 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _M_handle_repeat(const _State<_Char_type>& __state, _Match_head& __head)
     {
       const auto& __current = _M_context._M_current;
-      if (_M_last.first == 2 && _M_last.second == __current)
-	return false;
-
-      _StateIdT __first = __state._M_alt, __second = __state._M_next;
-      if (__state._M_neg)
-	swap(__first, __second);
-      _M_push<_Saved_dfs_repeat>(__second, _M_last, __current);
-      if (_M_last.first == 0 || _M_last.second != __current)
+      auto __state_id = __head._M_state;
+      if (!__state._M_neg)
 	{
-	  _M_last.first = 1;
-	  _M_last.second = __current;
+	  if (_M_last.first == __state_id && _M_last.second == __current)
+	    return false;
+	  _M_push<_Saved_dfs_repeat>(__state._M_next, _M_last, __current);
+	  _M_last = make_pair(__state_id, __current);
+	  __head._M_state = __state._M_alt;
 	}
       else
 	{
-	  _M_last.first++;
+	  _M_push<_Saved_dfs_neg_repeat>(__head._M_state, __state._M_alt);
+	  __head._M_state = __state._M_next;
 	}
-
-      __head._M_state = __first;
       return true;
     }
 
@@ -424,8 +414,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _Regex_scope<_Bi_iter>::_Dfs_executer<_Traits, __is_ecma>::
     _M_handle_alternative(const _State<_Char_type>& __state, _Match_head& __head)
     {
-      _M_push<_Saved_state>(__state._M_next);
-      this->_M_push<_Saved_position>(_M_context._M_current);
+      _M_push<_Saved_dfs_repeat>(__state._M_next, _M_last, _M_context._M_current);
       __head._M_state = __state._M_alt;
       return true;
     }
@@ -555,7 +544,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		    {\
 		      auto __save = std::move(__stack.template _M_top_item<_Type>());\
 		      __stack.template _M_pop<_Type>();\
-		      _M_restore(__save, __head);\
+		      _M_restore(std::move(__save), __head);\
 		    }
 		case _Saved_tag::_S_saved_state: __HANDLE(_Saved_state); break;
 		case _Saved_tag::_S_saved_capture: __HANDLE(_Saved_capture); break;

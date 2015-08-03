@@ -42,7 +42,8 @@ test01()
     VERIFY( regex_match_debug(s, m, re) );
     VERIFY( m.size() == 2 );
     VERIFY( m[0].matched );
-    VERIFY( m[1].matched );
+    // ECMAScript 262 [21.2.2.5.1] NOTE 4.
+    VERIFY(!m[1].matched );
   }
   {
     regex re("()*");

@@ -301,8 +301,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  {
 	    _S_saved_state,
 	    _S_saved_capture,
-	    _S_saved_position,
 	    _S_saved_dfs_repeat,
+	    _S_saved_dfs_neg_repeat,
+	    _S_saved_last,
 	  };
 
 	explicit
@@ -330,24 +331,32 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	_Capture _M_capture;
       };
 
-      struct _Saved_position : public _Saved_tag
-      {
-	explicit
-	_Saved_position(_Bi_iter __position)
-	: _Saved_tag(_Saved_tag::_S_saved_position), _M_position(std::move(__position)) { }
-
-	_Bi_iter _M_position;
-      };
-
       struct _Saved_dfs_repeat : public _Saved_tag
       {
-	explicit
-	_Saved_dfs_repeat(_StateIdT __next, const std::pair<int, _Bi_iter>& __last, _Bi_iter __current)
-	: _Saved_tag(_Saved_tag::_S_saved_dfs_repeat), _M_next(__next), _M_last(__last), _M_current(std::move(__current)) { }
+	_Saved_dfs_repeat(_StateIdT __next, std::pair<_StateIdT, _Bi_iter> __last, _Bi_iter __current)
+	: _Saved_tag(_Saved_tag::_S_saved_dfs_repeat), _M_next(__next), _M_last(std::move(__last)), _M_current(std::move(__current)) { }
 
 	_StateIdT _M_next;
-	std::pair<int, _Bi_iter> _M_last;
+	std::pair<_StateIdT, _Bi_iter> _M_last;
 	_Bi_iter _M_current;
+      };
+
+      struct _Saved_dfs_neg_repeat : public _Saved_tag
+      {
+	_Saved_dfs_neg_repeat(_StateIdT __original, _StateIdT __next)
+	: _Saved_tag(_Saved_tag::_S_saved_dfs_neg_repeat), _M_original(__original), _M_next(__next) { }
+
+	_StateIdT _M_original;
+	_StateIdT _M_next;
+      };
+
+      struct _Saved_last : public _Saved_tag
+      {
+	explicit
+	_Saved_last(std::pair<_StateIdT, _Bi_iter> __last)
+	: _Saved_tag(_Saved_tag::_S_saved_last), _M_last(std::move(__last)) { }
+
+	std::pair<_StateIdT, _Bi_iter> _M_last;
       };
 
       template<typename _Traits>
@@ -549,32 +558,60 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _M_handle_accept(const _State<_Char_type>& __state, _Match_head& __head);
 
 	  void
-	  _M_restore(const _Saved_state& __save, _Match_head& __head)
+	  _M_restore_state(_Dynamic_stack& __stack, _Match_head& __head)
 	  {
-	    __head._M_state = __save._M_state;
+	    __head._M_state = __stack.template _M_top_item<_Saved_state>()._M_state;
+	    __stack.template _M_pop<_Saved_state>();
 	    _M_dfs<_Dfs_executer>(*this, __head);
 	  }
 
 	  void
-	  _M_restore(const _Saved_capture& __save, _Match_head& __head)
-	  { __head._M_captures[__save._M_index] = std::move(__save._M_capture); }
-
-	  void
-	  _M_restore(const _Saved_position& __save, _Match_head& __head)
-	  { _M_context._M_current = std::move(__save._M_position); }
-
-	  void
-	  _M_restore(const _Saved_dfs_repeat& __save, _Match_head& __head)
+	  _M_restore_capture(_Dynamic_stack& __stack, _Match_head& __head)
 	  {
+	    auto& __save = __stack.template _M_top_item<_Saved_capture>();
+	    __head._M_captures[__save._M_index] = std::move(__save._M_capture);
+	    __stack.template _M_pop<_Saved_capture>();
+	  }
+
+	  void
+	  _M_restore_dfs_repeat(_Dynamic_stack& __stack, _Match_head& __head)
+	  {
+	    auto& __save = __stack.template _M_top_item<_Saved_dfs_repeat>();
 	    _M_last = __save._M_last;
 	    _M_context._M_current = __save._M_current;
 	    __head._M_state = __save._M_next;
+	    __stack.template _M_pop<_Saved_dfs_repeat>();
 	    _M_dfs<_Dfs_executer>(*this, __head);
+	  }
+
+	  void
+	  _M_restore_dfs_neg_repeat(_Dynamic_stack& __stack, _Match_head& __head)
+	  {
+	    auto& __save = __stack.template _M_top_item<_Saved_dfs_neg_repeat>();
+	    const auto& __current = _M_context._M_current;
+	    const auto& __state_id = __save._M_original;
+	    if (_M_last.first == __state_id && _M_last.second == __current)
+	      {
+		__stack.template _M_pop<_Saved_dfs_neg_repeat>();
+		return;
+	      }
+	    _M_push<_Saved_last>(_M_last);
+	    _M_last = make_pair(__state_id, __current);
+	    __head._M_state = __save._M_next;
+	    __stack.template _M_pop<_Saved_dfs_neg_repeat>();
+	    _M_dfs<_Dfs_executer>(*this, __head);
+	  }
+
+	  void
+	  _M_restore_last(_Dynamic_stack& __stack, _Match_head& __head)
+	  {
+	    _M_last = std::move(__stack.template _M_top_item<_Saved_last>()._M_last);
+	    __stack.template _M_pop<_Saved_last>();
 	  }
 
 	private:
 	  _Context<_Traits> _M_context;
-	  std::pair<int, _Bi_iter> _M_last;
+	  std::pair<_StateIdT, _Bi_iter> _M_last;
 
 	  template<typename _Executer>
 	    friend void
@@ -715,14 +752,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _M_search_from_first_impl();
 
 	  void
-	  _M_restore(const _Saved_state& __save, _Match_head& __head)
+	  _M_restore(_Saved_state __save, _Match_head& __head)
 	  {
 	    __head._M_state = __save._M_state;
 	    _M_dfs<_Bfs_executer>(*this, __head);
 	  }
 
 	  void
-	  _M_restore(const _Saved_capture& __save, _Match_head& __head)
+	  _M_restore(_Saved_capture __save, _Match_head& __head)
 	  { __head._M_captures[__save._M_index] = std::move(__save._M_capture); }
 
 	  _Context<_Traits> _M_context;
