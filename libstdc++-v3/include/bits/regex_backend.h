@@ -299,11 +299,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       {
 	enum _Type
 	  {
-	    _S_saved_state,
 	    _S_saved_capture,
 	    _S_saved_dfs_repeat,
 	    _S_saved_dfs_neg_repeat,
 	    _S_saved_last,
+	    _S_saved_state,
 	  };
 
 	explicit

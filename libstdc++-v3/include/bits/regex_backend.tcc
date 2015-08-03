@@ -272,7 +272,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _M_handle_subexpr_lookahead_common(_Context<_Traits>& __context, const _State<_Char_type>& __state, _Match_head& __head)
     {
       _Executer __executer;
-      __executer._M_get_context()._M_init(__context._M_current, __context._M_end, *__context._M_nfa, __context._M_flags, __context._M_search_mode);
+      __executer._M_get_context()._M_init(__context._M_current, __context._M_end, *__context._M_nfa, __context._M_flags | regex_constants::match_continuous, _Regex_search_mode::_Prefix);
       _Captures __captures;
       bool __ret = __match_impl(__executer, __state._M_alt, __captures);
       if (__ret != __state._M_neg)
