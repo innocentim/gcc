@@ -32,22 +32,58 @@ namespace std _GLIBCXX_VISIBILITY(default)
 {
 namespace __detail
 {
+namespace __regex
+{
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
+
+  // Return whether now is at some word boundary.
+  template<typename _Bi_iter, typename _Traits>
+    inline bool _Context<_Bi_iter, _Traits>::
+    _M_word_boundary() const
+    {
+      bool __left_is_word = false;
+      if (_M_current != _M_begin
+	  || (_M_match_flags & regex_constants::match_prev_avail))
+	{
+	  auto __prev = _M_current;
+	  if (_M_is_word(*std::prev(__prev)))
+	    __left_is_word = true;
+	}
+      bool __right_is_word =
+        _M_current != _M_end && _M_is_word(*_M_current);
+
+      if (__left_is_word == __right_is_word)
+	return false;
+      if (__left_is_word && !(_M_match_flags & regex_constants::match_not_eow))
+	return true;
+      if (__right_is_word && !(_M_match_flags & regex_constants::match_not_bow))
+	return true;
+      return false;
+    }
 
   template<typename _BiIter, typename _Alloc, typename _TraitsT,
 	   bool __dfs_mode>
+  template<_Search_mode __search_mode>
     bool _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
-    _M_search()
+    _M_match_impl(_StateIdT __start)
     {
-      if (_M_search_from_first())
-	return true;
-      if (_M_flags & regex_constants::match_continuous)
-	return false;
-      _M_flags |= regex_constants::match_prev_avail;
-      while (_M_begin != _M_end)
+      if (__search_mode == _Search_mode::_Match)
 	{
-	  ++_M_begin;
-	  if (_M_search_from_first())
+	  this->_M_current = this->_M_begin;
+	  return _M_main_dispatch(__start, __algorithm{});
+	}
+
+      this->_M_current = this->_M_begin;
+      if (_M_main_dispatch(__start, __algorithm{}))
+	return true;
+      if (this->_M_match_flags & regex_constants::match_continuous)
+	return false;
+      this->_M_match_flags |= regex_constants::match_prev_avail;
+      while (this->_M_begin != this->_M_end)
+	{
+	  ++this->_M_begin;
+	  this->_M_current = this->_M_begin;
+	  if (_M_main_dispatch(__start, __algorithm{}))
 	    return true;
 	}
       return false;
@@ -79,12 +115,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _BiIter, typename _Alloc, typename _TraitsT,
 	   bool __dfs_mode>
     bool _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
-    _M_main_dispatch(_Match_mode __match_mode, __dfs)
+    _M_main_dispatch(_StateIdT __start, __dfs)
     {
       _M_has_sol = false;
       *_M_states._M_get_sol_pos() = _BiIter();
       _M_cur_results = _M_results;
-      _M_dfs(__match_mode, _M_states._M_start);
+      _M_dfs(__start);
       return _M_has_sol;
     }
 
@@ -113,29 +149,30 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _BiIter, typename _Alloc, typename _TraitsT,
 	   bool __dfs_mode>
     bool _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
-    _M_main_dispatch(_Match_mode __match_mode, __bfs)
+    _M_main_dispatch(_StateIdT __start, __bfs)
     {
-      _M_states._M_queue(_M_states._M_start, _M_results);
+      _M_states._M_queue(__start, _M_results);
       bool __ret = false;
       while (1)
 	{
 	  _M_has_sol = false;
 	  if (_M_states._M_match_queue.empty())
 	    break;
-	  std::fill_n(_M_states._M_visited_states.get(), _M_nfa.size(), false);
+	  std::fill_n(_M_states._M_visited_states.get(),
+		      this->_M_nfa.size(), false);
 	  auto __old_queue = std::move(_M_states._M_match_queue);
 	  for (auto& __task : __old_queue)
 	    {
 	      _M_cur_results = std::move(__task.second);
-	      _M_dfs(__match_mode, __task.first);
+	      _M_dfs(__task.first);
 	    }
-	  if (__match_mode == _Match_mode::_Prefix)
+	  if (this->_M_search_mode == _Search_mode::_Search)
 	    __ret |= _M_has_sol;
-	  if (_M_current == _M_end)
+	  if (this->_M_current == this->_M_end)
 	    break;
-	  ++_M_current;
+	  ++this->_M_current;
 	}
-      if (__match_mode == _Match_mode::_Exact)
+      if (this->_M_search_mode == _Search_mode::_Match)
 	__ret = _M_has_sol;
       _M_states._M_match_queue.clear();
       return __ret;
@@ -148,9 +185,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _M_lookahead(_StateIdT __next)
     {
       _ResultsVec __what(_M_cur_results.size());
-      _Executor __sub(_M_current, _M_end, __what, _M_re, _M_flags);
-      __sub._M_states._M_start = __next;
-      if (__sub._M_search_from_first())
+      _Executor __sub(
+	this->_M_current, this->_M_end, this->_M_nfa,
+	this->_M_match_flags | regex_constants::match_continuous,
+	_Search_mode::_Search, __what);
+      if (__sub._M_match_impl<_Search_mode::_Search>(__next))
 	{
 	  for (size_t __i = 0; __i < __what.size(); __i++)
 	    if (__what[__i].matched)
@@ -169,16 +208,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _BiIter, typename _Alloc, typename _TraitsT,
     bool __dfs_mode>
     void _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
-    _M_rep_once_more(_Match_mode __match_mode, _StateIdT __i)
+    _M_rep_once_more(_StateIdT __i)
     {
-      const auto& __state = _M_nfa[__i];
+      const auto& __state = (this->_M_nfa)[__i];
       auto& __rep_count = _M_rep_count[__i];
-      if (__rep_count.second == 0 || __rep_count.first != _M_current)
+      if (__rep_count.second == 0 || __rep_count.first != this->_M_current)
 	{
 	  auto __back = __rep_count;
-	  __rep_count.first = _M_current;
+	  __rep_count.first = this->_M_current;
 	  __rep_count.second = 1;
-	  _M_dfs(__match_mode, __state._M_alt);
+	  _M_dfs(__state._M_alt);
 	  __rep_count = __back;
 	}
       else
@@ -186,7 +225,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  if (__rep_count.second < 2)
 	    {
 	      __rep_count.second++;
-	      _M_dfs(__match_mode, __state._M_alt);
+	      _M_dfs(__state._M_alt);
 	      __rep_count.second--;
 	    }
 	}
@@ -195,12 +234,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _BiIter, typename _Alloc, typename _TraitsT,
 	   bool __dfs_mode>
     void _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
-    _M_dfs(_Match_mode __match_mode, _StateIdT __i)
+    _M_dfs(_StateIdT __i)
     {
       if (_M_states._M_visited(__i))
 	return;
 
-      const auto& __state = _M_nfa[__i];
+      const auto& __state = (this->_M_nfa)[__i];
       // Every change on _M_cur_results and _M_current will be rolled back after
       // finishing the recursion step.
       switch (__state._M_opcode())
@@ -214,19 +253,19 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    // Greedy.
 	    if (!__state._M_neg)
 	      {
-		_M_rep_once_more(__match_mode, __i);
+		_M_rep_once_more(__i);
 		// If it's DFS executor and already accepted, we're done.
 		if (!__dfs_mode || !_M_has_sol)
-		  _M_dfs(__match_mode, __state._M_next);
+		  _M_dfs(__state._M_next);
 	      }
 	    else // Non-greedy mode
 	      {
 		if (__dfs_mode)
 		  {
 		    // vice-versa.
-		    _M_dfs(__match_mode, __state._M_next);
+		    _M_dfs(__state._M_next);
 		    if (!_M_has_sol)
-		      _M_rep_once_more(__match_mode, __i);
+		      _M_rep_once_more(__i);
 		  }
 		else
 		  {
@@ -235,12 +274,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		    // be better by attempting its next node.
 		    if (!_M_has_sol)
 		      {
-			_M_dfs(__match_mode, __state._M_next);
+			_M_dfs(__state._M_next);
 			// DON'T attempt anything if it's already accepted. An
 			// accepted state *must* be better than a solution that
 			// matches a non-greedy quantifier one more time.
 			if (!_M_has_sol)
-			  _M_rep_once_more(__match_mode, __i);
+			  _M_rep_once_more(__i);
 		      }
 		  }
 	      }
@@ -250,8 +289,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  {
 	    auto& __res = _M_cur_results[__state._M_subexpr];
 	    auto __back = __res.first;
-	    __res.first = _M_current;
-	    _M_dfs(__match_mode, __state._M_next);
+	    __res.first = this->_M_current;
+	    _M_dfs(__state._M_next);
 	    __res.first = __back;
 	  }
 	  break;
@@ -259,44 +298,44 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  {
 	    auto& __res = _M_cur_results[__state._M_subexpr];
 	    auto __back = __res;
-	    __res.second = _M_current;
+	    __res.second = this->_M_current;
 	    __res.matched = true;
-	    _M_dfs(__match_mode, __state._M_next);
+	    _M_dfs(__state._M_next);
 	    __res = __back;
 	  }
 	  break;
 	case _S_opcode_line_begin_assertion:
-	  if (_M_at_begin())
-	    _M_dfs(__match_mode, __state._M_next);
+	  if (this->_M_at_begin())
+	    _M_dfs(__state._M_next);
 	  break;
 	case _S_opcode_line_end_assertion:
-	  if (_M_at_end())
-	    _M_dfs(__match_mode, __state._M_next);
+	  if (this->_M_at_end())
+	    _M_dfs(__state._M_next);
 	  break;
 	case _S_opcode_word_boundary:
-	  if (_M_word_boundary() == !__state._M_neg)
-	    _M_dfs(__match_mode, __state._M_next);
+	  if (this->_M_word_boundary() == !__state._M_neg)
+	    _M_dfs(__state._M_next);
 	  break;
 	// Here __state._M_alt offers a single start node for a sub-NFA.
 	// We recursively invoke our algorithm to match the sub-NFA.
 	case _S_opcode_subexpr_lookahead:
 	  if (_M_lookahead(__state._M_alt) == !__state._M_neg)
-	    _M_dfs(__match_mode, __state._M_next);
+	    _M_dfs(__state._M_next);
 	  break;
 	case _S_opcode_match:
-	  if (_M_current == _M_end)
+	  if (this->_M_current == this->_M_end)
 	    break;
 	  if (__dfs_mode)
 	    {
-	      if (__state._M_matches(*_M_current))
+	      if (__state._M_matches(*this->_M_current))
 		{
-		  ++_M_current;
-		  _M_dfs(__match_mode, __state._M_next);
-		  --_M_current;
+		  ++this->_M_current;
+		  _M_dfs(__state._M_next);
+		  --this->_M_current;
 		}
 	    }
 	  else
-	    if (__state._M_matches(*_M_current))
+	    if (__state._M_matches(*this->_M_current))
 	      _M_states._M_queue(__state._M_next, _M_cur_results);
 	  break;
 	// First fetch the matched result from _M_cur_results as __submatch;
@@ -309,24 +348,24 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    auto& __submatch = _M_cur_results[__state._M_backref_index];
 	    if (!__submatch.matched)
 	      break;
-	    auto __last = _M_current;
+	    auto __last = this->_M_current;
 	    for (auto __tmp = __submatch.first;
-		 __last != _M_end && __tmp != __submatch.second;
+		 __last != this->_M_end && __tmp != __submatch.second;
 		 ++__tmp)
 	      ++__last;
-	    if (_M_re._M_automaton->_M_traits.transform(__submatch.first,
-							__submatch.second)
-		== _M_re._M_automaton->_M_traits.transform(_M_current, __last))
+	    if (this->_M_nfa._M_traits.transform(__submatch.first,
+						  __submatch.second)
+		== this->_M_nfa._M_traits.transform(this->_M_current, __last))
 	      {
-		if (__last != _M_current)
+		if (__last != this->_M_current)
 		  {
-		    auto __backup = _M_current;
-		    _M_current = __last;
-		    _M_dfs(__match_mode, __state._M_next);
-		    _M_current = __backup;
+		    auto __backup = this->_M_current;
+		    this->_M_current = __last;
+		    _M_dfs(__state._M_next);
+		    this->_M_current = __backup;
 		  }
 		else
-		  _M_dfs(__match_mode, __state._M_next);
+		  _M_dfs(__state._M_next);
 	      }
 	  }
 	  break;
@@ -334,33 +373,28 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  if (__dfs_mode)
 	    {
 	      __glibcxx_assert(!_M_has_sol);
-	      if (__match_mode == _Match_mode::_Exact)
-		_M_has_sol = _M_current == _M_end;
+	      if (this->_M_search_mode == _Search_mode::_Match)
+		_M_has_sol = this->_M_current == this->_M_end;
 	      else
 		_M_has_sol = true;
-	      if (_M_current == _M_begin
-		  && (_M_flags & regex_constants::match_not_null))
+	      if (this->_M_current == this->_M_begin
+		  && (this->_M_match_flags & regex_constants::match_not_null))
 		_M_has_sol = false;
 	      if (_M_has_sol)
 		{
-		  if (_M_nfa._M_flags & regex_constants::ECMAScript)
+		  if (this->_M_nfa._M_options() & regex_constants::ECMAScript)
 		    _M_results = _M_cur_results;
 		  else // POSIX
 		    {
 		      __glibcxx_assert(_M_states._M_get_sol_pos());
-		      // Here's POSIX's logic: match the longest one. However
-		      // we never know which one (lhs or rhs of "|") is longer
-		      // unless we try both of them and compare the results.
-		      // The member variable _M_sol_pos records the end
-		      // position of the last successful match. It's better
-		      // to be larger, because POSIX regex is always greedy.
-		      // TODO: This could be slow.
+		      // TODO: This isn't entirely correct. Implement leftmost
+		      // longest for POSIX.
 		      if (*_M_states._M_get_sol_pos() == _BiIter()
-			  || std::distance(_M_begin,
+			  || std::distance(this->_M_begin,
 					   *_M_states._M_get_sol_pos())
-			     < std::distance(_M_begin, _M_current))
+			     < std::distance(this->_M_begin, this->_M_current))
 			{
-			  *_M_states._M_get_sol_pos() = _M_current;
+			  *_M_states._M_get_sol_pos() = this->_M_current;
 			  _M_results = _M_cur_results;
 			}
 		    }
@@ -368,10 +402,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    }
 	  else
 	    {
-	      if (_M_current == _M_begin
-		  && (_M_flags & regex_constants::match_not_null))
+	      if (this->_M_current == this->_M_begin
+		  && (this->_M_match_flags & regex_constants::match_not_null))
 		break;
-	      if (__match_mode == _Match_mode::_Prefix || _M_current == _M_end)
+	      if (this->_M_search_mode == _Search_mode::_Search
+		  || this->_M_current == this->_M_end)
 		if (!_M_has_sol)
 		  {
 		    _M_has_sol = true;
@@ -380,22 +415,22 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    }
 	  break;
 	case _S_opcode_alternative:
-	  if (_M_nfa._M_flags & regex_constants::ECMAScript)
+	  if (this->_M_nfa._M_options() & regex_constants::ECMAScript)
 	    {
 	      // TODO: Fix BFS support. It is wrong.
-	      _M_dfs(__match_mode, __state._M_alt);
+	      _M_dfs(__state._M_alt);
 	      // Pick lhs if it matches. Only try rhs if it doesn't.
 	      if (!_M_has_sol)
-		_M_dfs(__match_mode, __state._M_next);
+		_M_dfs(__state._M_next);
 	    }
 	  else
 	    {
 	      // Try both and compare the result.
 	      // See "case _S_opcode_accept:" handling above.
-	      _M_dfs(__match_mode, __state._M_alt);
+	      _M_dfs(__state._M_alt);
 	      auto __has_sol = _M_has_sol;
 	      _M_has_sol = false;
-	      _M_dfs(__match_mode, __state._M_next);
+	      _M_dfs(__state._M_next);
 	      _M_has_sol |= __has_sol;
 	    }
 	  break;
@@ -404,32 +439,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
     }
 
-  // Return whether now is at some word boundary.
-  template<typename _BiIter, typename _Alloc, typename _TraitsT,
-	   bool __dfs_mode>
-    bool _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
-    _M_word_boundary() const
-    {
-      bool __left_is_word = false;
-      if (_M_current != _M_begin
-	  || (_M_flags & regex_constants::match_prev_avail))
-	{
-	  auto __prev = _M_current;
-	  if (_M_is_word(*std::prev(__prev)))
-	    __left_is_word = true;
-	}
-      bool __right_is_word =
-        _M_current != _M_end && _M_is_word(*_M_current);
-
-      if (__left_is_word == __right_is_word)
-	return false;
-      if (__left_is_word && !(_M_flags & regex_constants::match_not_eow))
-	return true;
-      if (__right_is_word && !(_M_flags & regex_constants::match_not_bow))
-	return true;
-      return false;
-    }
-
 _GLIBCXX_END_NAMESPACE_VERSION
+} // namespace __regex
 } // namespace __detail
 } // namespace

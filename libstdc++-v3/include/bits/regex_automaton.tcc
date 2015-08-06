@@ -125,7 +125,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	__ostr << __id << " [label=\"" << __id << "\\nACC\"];\n" ;
 	break;
       default:
-	_GLIBCXX_DEBUG_ASSERT(false);
+	__glibcxx_assert(false);
 	break;
     }
     return __ostr;

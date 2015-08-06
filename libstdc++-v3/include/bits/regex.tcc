@@ -61,25 +61,21 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	__it.matched = false;
 
       bool __ret;
+      constexpr auto __mode = __match_mode
+	? __regex::_Search_mode::_Match : __regex::_Search_mode::_Search;
       if ((__re.flags() & regex_constants::__polynomial)
 	  || (__policy == _RegexExecutorPolicy::_S_alternate
 	      && !__re._M_automaton->_M_has_backref))
 	{
-	  _Executor<_BiIter, _Alloc, _TraitsT, false>
-	    __executor(__s, __e, __m, __re, __flags);
-	  if (__match_mode)
-	    __ret = __executor._M_match();
-	  else
-	    __ret = __executor._M_search();
+	  __regex::_Executor<_BiIter, _Alloc, _TraitsT, false> __executor(
+	      __s, __e, *__re._M_automaton, __flags, __mode, __res);
+	  __ret = __executor.template _M_match<__mode>();
 	}
       else
 	{
-	  _Executor<_BiIter, _Alloc, _TraitsT, true>
-	    __executor(__s, __e, __m, __re, __flags);
-	  if (__match_mode)
-	    __ret = __executor._M_match();
-	  else
-	    __ret = __executor._M_search();
+	  __regex::_Executor<_BiIter, _Alloc, _TraitsT, true> __executor(
+	      __s, __e, *__re._M_automaton, __flags, __mode, __res);
+	  __ret = __executor.template _M_match<__mode>();
 	}
       if (__ret)
 	{

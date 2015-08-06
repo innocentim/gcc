@@ -32,14 +32,70 @@
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE_CXX11
+
+  template<typename>
+    class sub_match;
+
+_GLIBCXX_END_NAMESPACE_CXX11
+_GLIBCXX_END_NAMESPACE_VERSION
 namespace __detail
 {
+namespace __regex
+{
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
-
   /**
    * @addtogroup regex-detail
    * @{
    */
+
+  enum class _Search_mode : unsigned char { _Match, _Search };
+
+  template<typename _Bi_iter, typename _Traits>
+    struct _Context
+    {
+      using _Char_type = typename iterator_traits<_Bi_iter>::value_type;
+
+      _Context(_Bi_iter __begin, _Bi_iter __end, const _NFA<_Traits>& __nfa,
+	       regex_constants::match_flag_type __flags,
+	       _Search_mode __search_mode)
+      : _M_begin(__begin), _M_end(__end), _M_nfa(__nfa),
+      _M_match_flags(__flags), _M_search_mode(__search_mode) { }
+
+      bool
+      _M_is_word(_Char_type __ch) const
+      {
+	static const _Char_type __s[2] = { 'w' };
+	return _M_nfa._M_traits.isctype
+	  (__ch, _M_nfa._M_traits.lookup_classname(__s, __s+1));
+      }
+
+      bool
+      _M_at_begin() const
+      {
+	return _M_current == _M_begin
+	  && !(_M_match_flags & (regex_constants::match_not_bol
+				 | regex_constants::match_prev_avail));
+      }
+
+      bool
+      _M_at_end() const
+      {
+	return _M_current == _M_end
+	  && !(_M_match_flags & regex_constants::match_not_eol);
+      }
+
+      bool
+      _M_word_boundary() const;
+
+      _Bi_iter                          _M_current;
+      _Bi_iter                          _M_begin;
+      const _Bi_iter                    _M_end;
+      const _NFA<_Traits>&              _M_nfa;
+      regex_constants::match_flag_type  _M_match_flags;
+      _Search_mode                      _M_search_mode;
+    };
 
   /**
    * @brief Takes a regex and an input string and does the matching.
@@ -49,118 +105,66 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    */
   template<typename _BiIter, typename _Alloc, typename _TraitsT,
 	   bool __dfs_mode>
-    class _Executor
+    class _Executor : private _Context<_BiIter, _TraitsT>
     {
-      using __search_mode = integral_constant<bool, __dfs_mode>;
+      using __algorithm = integral_constant<bool, __dfs_mode>;
       using __dfs = true_type;
       using __bfs = false_type;
-
-      enum class _Match_mode : unsigned char { _Exact, _Prefix };
+      using _Context_type = _Context<_BiIter, _TraitsT>;
 
     public:
-      typedef typename iterator_traits<_BiIter>::value_type _CharT;
-      typedef basic_regex<_CharT, _TraitsT>                 _RegexT;
       typedef std::vector<sub_match<_BiIter>, _Alloc>       _ResultsVec;
-      typedef regex_constants::match_flag_type              _FlagT;
-      typedef typename _TraitsT::char_class_type            _ClassT;
-      typedef _NFA<_TraitsT>                                _NFAT;
 
     public:
-      _Executor(_BiIter         __begin,
-		_BiIter         __end,
-		_ResultsVec&    __results,
-		const _RegexT&  __re,
-		_FlagT          __flags)
-      : _M_begin(__begin),
-      _M_end(__end),
-      _M_re(__re),
-      _M_nfa(*__re._M_automaton),
-      _M_results(__results),
-      _M_rep_count(_M_nfa.size()),
-      _M_states(_M_nfa._M_start(), _M_nfa.size()),
-      _M_flags((__flags & regex_constants::match_prev_avail)
-	       ? (__flags
-		  & ~regex_constants::match_not_bol
-		  & ~regex_constants::match_not_bow)
-	       : __flags)
+      _Executor(_BiIter __begin, _BiIter __end, const _NFA<_TraitsT>& __nfa,
+		regex_constants::match_flag_type __flags,
+		_Search_mode __search_mode, _ResultsVec& __results)
+      : _Context_type(__begin, __end, __nfa, __flags, __search_mode),
+      _M_results(__results), _M_rep_count(this->_M_nfa.size()),
+      _M_states(this->_M_nfa.size())
       { }
 
-      // Set matched when string exactly matches the pattern.
-      bool
-      _M_match()
-      {
-	_M_current = _M_begin;
-	return _M_main(_Match_mode::_Exact);
-      }
-
-      // Set matched when some prefix of the string matches the pattern.
-      bool
-      _M_search_from_first()
-      {
-	_M_current = _M_begin;
-	return _M_main(_Match_mode::_Prefix);
-      }
-
-      bool
-      _M_search();
+      // __search_mode should be the same as this->_M_search_mode. It's
+      // slightly faster to let caller specify __search_mode again
+      // as a template argument.
+      // Still, in other places we prefer using the dynamic
+      // this->_M_search_mode,
+      // because it doesn't deserve being passed around as a template
+      // argument/function argument, since it's used in only a few places.
+      template<_Search_mode __search_mode>
+	bool
+	_M_match()
+	{ return _M_match_impl<__search_mode>(this->_M_nfa._M_start()); }
 
     private:
-      void
-      _M_rep_once_more(_Match_mode __match_mode, _StateIdT);
+      template<_Search_mode __search_mode>
+	bool
+	_M_match_impl(_StateIdT __start);
 
       void
-      _M_dfs(_Match_mode __match_mode, _StateIdT __start);
+      _M_rep_once_more(_StateIdT);
+
+      void
+      _M_dfs(_StateIdT __start);
 
       bool
-      _M_main(_Match_mode __match_mode)
-      { return _M_main_dispatch(__match_mode, __search_mode{}); }
+      _M_main_dispatch(_StateIdT __start, __dfs);
 
       bool
-      _M_main_dispatch(_Match_mode __match_mode, __dfs);
-
-      bool
-      _M_main_dispatch(_Match_mode __match_mode, __bfs);
-
-      bool
-      _M_is_word(_CharT __ch) const
-      {
-	static const _CharT __s[2] = { 'w' };
-	return _M_re._M_automaton->_M_traits.isctype
-	  (__ch, _M_re._M_automaton->_M_traits.lookup_classname(__s, __s+1));
-      }
-
-      bool
-      _M_at_begin() const
-      {
-	return _M_current == _M_begin
-	  && !(_M_flags & (regex_constants::match_not_bol
-			   | regex_constants::match_prev_avail));
-      }
-
-      bool
-      _M_at_end() const
-      {
-	return _M_current == _M_end
-	  && !(_M_flags & regex_constants::match_not_eol);
-      }
-
-      bool
-      _M_word_boundary() const;
+      _M_main_dispatch(_StateIdT __start, __bfs);
 
       bool
       _M_lookahead(_StateIdT __next);
 
        // Holds additional information used in BFS-mode.
-      template<typename _SearchMode, typename _ResultsVec>
+      template<typename _Algorithm, typename _ResultsVec>
 	struct _State_info;
 
       template<typename _ResultsVec>
 	struct _State_info<__bfs, _ResultsVec>
 	{
 	  explicit
-	  _State_info(_StateIdT __start, size_t __n)
-	  : _M_visited_states(new bool[__n]()), _M_start(__start)
-	  { }
+	  _State_info(size_t __n) : _M_visited_states(new bool[__n]()) { }
 
 	  bool _M_visited(_StateIdT __i)
 	  {
@@ -180,16 +184,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  vector<pair<_StateIdT, _ResultsVec>>	_M_match_queue;
 	  // Indicates which states are already visited.
 	  unique_ptr<bool[]>			_M_visited_states;
-	  // To record current solution.
-	  _StateIdT _M_start;
 	};
 
       template<typename _ResultsVec>
 	struct _State_info<__dfs, _ResultsVec>
 	{
 	  explicit
-	  _State_info(_StateIdT __start, size_t) : _M_start(__start)
-	  { }
+	  _State_info(size_t) { }
 
 	  // Dummy implementations for DFS mode.
 	  bool _M_visited(_StateIdT) const { return false; }
@@ -197,28 +198,21 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 	  _BiIter* _M_get_sol_pos() { return &_M_sol_pos; }
 
-	  // To record current solution.
-	  _StateIdT _M_start;
 	  _BiIter   _M_sol_pos;
 	};
 
     public:
       _ResultsVec                                           _M_cur_results;
-      _BiIter                                               _M_current;
-      _BiIter                                               _M_begin;
-      const _BiIter                                         _M_end;
-      const _RegexT&                                        _M_re;
-      const _NFAT&                                          _M_nfa;
       _ResultsVec&                                          _M_results;
       vector<pair<_BiIter, int>>                            _M_rep_count;
-      _State_info<__search_mode, _ResultsVec>		    _M_states;
-      _FlagT                                                _M_flags;
+      _State_info<__algorithm, _ResultsVec>		    _M_states;
       // Do we have a solution so far?
       bool                                                  _M_has_sol;
     };
 
  //@} regex-detail
 _GLIBCXX_END_NAMESPACE_VERSION
+} // namespace __regex
 } // namespace __detail
 } // namespace std
 

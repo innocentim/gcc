@@ -375,7 +375,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       bool
       operator()(_CharT __ch) const
       {
-	_GLIBCXX_DEBUG_ASSERT(_M_is_ready);
+	__glibcxx_assert(_M_is_ready);
 	return _M_apply(__ch, _UseCache());
       }
 

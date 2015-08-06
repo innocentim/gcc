@@ -582,7 +582,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	ostr << "quoted class " << "\\" << _M_value << "\n";
 	break;
       default:
-	_GLIBCXX_DEBUG_ASSERT(false);
+	__glibcxx_assert(false);
       }
       return ostr;
     }
