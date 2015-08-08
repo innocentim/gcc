@@ -70,6 +70,13 @@ test01()
         VERIFY( true );
       }
   }
+  {
+    cmatch m;
+    VERIFY(regex_match("AAAA", m, regex("([A-Z]*)(\\1)", regex_constants::collate)));
+    VERIFY( m[0] == "AAAA" );
+    VERIFY( m[1] == "AA" );
+    VERIFY( m[2] == "AA" );
+  }
 }
 
 int

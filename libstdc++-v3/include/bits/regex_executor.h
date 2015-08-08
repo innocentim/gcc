@@ -156,6 +156,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       bool
       _M_lookahead(_StateIdT __next);
 
+      void
+      _M_match_backref(size_t __index, _StateIdT __next);
+
        // Holds additional information used in BFS-mode.
       template<typename _Algorithm, typename _ResultsVec>
 	struct _State_info;

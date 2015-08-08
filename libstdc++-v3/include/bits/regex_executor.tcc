@@ -199,6 +199,48 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return false;
     }
 
+  template<typename _BiIter, typename _Alloc, typename _TraitsT,
+	   bool __dfs_mode>
+    void _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
+    _M_match_backref(size_t __index, _StateIdT __next)
+    {
+      __glibcxx_assert(__dfs_mode);
+      auto& __submatch = _M_cur_results[__index];
+      if (__submatch.matched)
+	{
+	  auto __last = this->_M_current;
+	  for (auto __tmp = __submatch.first;
+	       __last != this->_M_end && __tmp != __submatch.second;
+	       ++__tmp)
+	    ++__last;
+	  if (this->_M_nfa._M_options() & regex_constants::collate)
+	    {
+	      const auto& __traits = this->_M_nfa._M_traits;
+	      if (__traits.transform(__submatch.first, __submatch.second)
+		  != __traits.transform(this->_M_current, __last))
+		return;
+	    }
+	  else
+	    {
+	      if (!std::equal(__submatch.first, __submatch.second,
+			      this->_M_current))
+		return;
+	    }
+	  auto __back = this->_M_current;
+	  this->_M_current = __last;
+	  _M_dfs(__next);
+	  this->_M_current = std::move(__back);
+	}
+      else
+	{
+	  // ECMAScript [21.2.2.9] Note:
+	  // If the regular expression has n or more capturing parentheses
+	  // but the nth one is undefined because it has not captured
+	  // anything, then the backreference always succeeds.
+	  _M_dfs(__next);
+	}
+    }
+
   // ECMAScript 262 [21.2.2.5.1] Note 4:
   // ...once the minimum number of repetitions has been satisfied, any more
   // expansions of Atom that match the empty character sequence are not
@@ -334,31 +376,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	// (_M_current, _M_current + (__submatch.second - __submatch.first)).
 	// If matched, keep going; else just return and try another state.
 	case _S_opcode_backref:
-	  {
-	    __glibcxx_assert(__dfs_mode);
-	    auto& __submatch = _M_cur_results[__state._M_backref_index];
-	    if (!__submatch.matched)
-	      break;
-	    auto __last = this->_M_current;
-	    for (auto __tmp = __submatch.first;
-		 __last != this->_M_end && __tmp != __submatch.second;
-		 ++__tmp)
-	      ++__last;
-	    if (this->_M_nfa._M_traits.transform(__submatch.first,
-						  __submatch.second)
-		== this->_M_nfa._M_traits.transform(this->_M_current, __last))
-	      {
-		if (__last != this->_M_current)
-		  {
-		    auto __backup = this->_M_current;
-		    this->_M_current = __last;
-		    _M_dfs(__state._M_next);
-		    this->_M_current = __backup;
-		  }
-		else
-		  _M_dfs(__state._M_next);
-	      }
-	  }
+	  __glibcxx_assert(__dfs_mode);
+	  _M_match_backref(__state._M_backref_index, __state._M_next);
 	  break;
 	case _S_opcode_accept:
 	  if (__dfs_mode)
