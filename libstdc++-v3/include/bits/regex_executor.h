@@ -97,6 +97,19 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _Search_mode                      _M_search_mode;
     };
 
+  template<typename _Executor>
+    class _Executor_mixin
+    {
+    protected:
+      void
+      _M_dfs(_StateIdT __state_id);
+
+    private:
+      _Executor*
+      _M_this()
+      { return static_cast<_Executor*>(this); }
+    };
+
   /**
    * @brief Takes a regex and an input string and does the matching.
    *
@@ -105,12 +118,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    */
   template<typename _BiIter, typename _Alloc, typename _TraitsT,
 	   bool __dfs_mode>
-    class _Executor : private _Context<_BiIter, _TraitsT>
+    class _Executor
+    : private _Context<_BiIter, _TraitsT>,
+      private _Executor_mixin<_Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>>
     {
       using __algorithm = integral_constant<bool, __dfs_mode>;
       using __dfs = true_type;
       using __bfs = false_type;
       using _Context_type = _Context<_BiIter, _TraitsT>;
+      using _State_type = _State<typename iterator_traits<_BiIter>::value_type>;
 
     public:
       typedef std::vector<sub_match<_BiIter>, _Alloc>       _ResultsVec;
@@ -141,23 +157,51 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	bool
 	_M_match_impl(_StateIdT __start);
 
-      void
-      _M_nonreentrant_repeat(_StateIdT, _StateIdT);
+      bool
+      _M_handle_visit(_StateIdT __state_id)
+      { return _M_states._M_visited(__state_id); }
 
       void
-      _M_dfs(_StateIdT __start);
+      _M_handle_repeat(_StateIdT __state_id);
+
+      void
+      _M_handle_subexpr_begin(const _State_type& __state);
+
+      void
+      _M_handle_subexpr_end(const _State_type& __state);
+
+      void
+      _M_handle_line_begin_assertion(const _State_type& __state);
+
+      void
+      _M_handle_line_end_assertion(const _State_type& __state);
+
+      void
+      _M_handle_word_boundary(const _State_type& __state);
+
+      void
+      _M_handle_subexpr_lookahead(const _State_type& __state);
+
+      void
+      _M_handle_match(const _State_type& __state);
+
+      void
+      _M_handle_backref(const _State_type& __state);
+
+      void
+      _M_handle_accept(const _State_type& __state);
+
+      void
+      _M_handle_alternative(const _State_type& __state);
+
+      void
+      _M_nonreentrant_repeat(_StateIdT, _StateIdT);
 
       bool
       _M_main_dispatch(_StateIdT __start, __dfs);
 
       bool
       _M_main_dispatch(_StateIdT __start, __bfs);
-
-      bool
-      _M_lookahead(_StateIdT __next);
-
-      void
-      _M_match_backref(size_t __index, _StateIdT __next);
 
        // Holds additional information used in BFS-mode.
       template<typename _Algorithm, typename _ResultsVec>
@@ -211,6 +255,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _State_info<__algorithm, _ResultsVec>		    _M_states;
       // Do we have a solution so far?
       bool                                                  _M_has_sol;
+
+      template<typename _Ep>
+	friend class _Executor_mixin;
     };
 
  //@} regex-detail

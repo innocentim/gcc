@@ -39,7 +39,7 @@ test01()
     regex re("()*\\1");
     cmatch m;
     const char s[] = "";
-    VERIFY(!regex_match_debug(s, m, re) );
+    VERIFY( regex_match_debug(s, m, re) );
   }
   {
     regex re("()*");
