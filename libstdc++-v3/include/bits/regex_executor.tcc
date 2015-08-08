@@ -199,36 +199,21 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return false;
     }
 
-  // __rep_count records how many times (__rep_count.second)
-  // this node is visited under certain input iterator
-  // (__rep_count.first). This prevent the executor from entering
-  // infinite loop by refusing to continue when it's already been
-  // visited more than twice. It's `twice` instead of `once` because
-  // we need to spare one more time for potential group capture.
+  // ECMAScript 262 [21.2.2.5.1] Note 4:
+  // ...once the minimum number of repetitions has been satisfied, any more
+  // expansions of Atom that match the empty character sequence are not
+  // considered for further repetitions.
+  //
+  // POSIX doesn't specify this, so let's keep them consistent.
   template<typename _BiIter, typename _Alloc, typename _TraitsT,
     bool __dfs_mode>
     void _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
-    _M_rep_once_more(_StateIdT __i)
+    _M_nonreentrant_repeat(_StateIdT __i, _StateIdT __alt)
     {
-      const auto& __state = (this->_M_nfa)[__i];
-      auto& __rep_count = _M_rep_count[__i];
-      if (__rep_count.second == 0 || __rep_count.first != this->_M_current)
-	{
-	  auto __back = __rep_count;
-	  __rep_count.first = this->_M_current;
-	  __rep_count.second = 1;
-	  _M_dfs(__state._M_alt);
-	  __rep_count = __back;
-	}
-      else
-	{
-	  if (__rep_count.second < 2)
-	    {
-	      __rep_count.second++;
-	      _M_dfs(__state._M_alt);
-	      __rep_count.second--;
-	    }
-	}
+      auto __back = _M_last_rep_visit;
+      _M_last_rep_visit = make_pair(__i, this->_M_current);
+      _M_dfs(__alt);
+      _M_last_rep_visit = std::move(__back);
     };
 
   template<typename _BiIter, typename _Alloc, typename _TraitsT,
@@ -250,10 +235,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	// given greedy mode.
 	case _S_opcode_repeat:
 	  {
+	    // The most recent repeated state visit is the same, and
+	    // this->_M_current doesn't change since then. Shouldn't
+	    // continue dead looping.
+	    if (_M_last_rep_visit.first == __i
+		&& _M_last_rep_visit.second == this->_M_current)
+	      return;
 	    // Greedy.
 	    if (!__state._M_neg)
 	      {
-		_M_rep_once_more(__i);
+		_M_nonreentrant_repeat(__i, __state._M_alt);
 		// If it's DFS executor and already accepted, we're done.
 		if (!__dfs_mode || !_M_has_sol)
 		  _M_dfs(__state._M_next);
@@ -265,7 +256,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		    // vice-versa.
 		    _M_dfs(__state._M_next);
 		    if (!_M_has_sol)
-		      _M_rep_once_more(__i);
+		      _M_nonreentrant_repeat(__i, __state._M_alt);
 		  }
 		else
 		  {
@@ -279,7 +270,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 			// accepted state *must* be better than a solution that
 			// matches a non-greedy quantifier one more time.
 			if (!_M_has_sol)
-			  _M_rep_once_more(__i);
+			  _M_nonreentrant_repeat(__i, __state._M_alt);
 		      }
 		  }
 	      }

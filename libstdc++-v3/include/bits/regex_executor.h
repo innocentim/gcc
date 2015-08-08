@@ -120,7 +120,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		regex_constants::match_flag_type __flags,
 		_Search_mode __search_mode, _ResultsVec& __results)
       : _Context_type(__begin, __end, __nfa, __flags, __search_mode),
-      _M_results(__results), _M_rep_count(this->_M_nfa.size()),
+      _M_results(__results), _M_last_rep_visit(_S_invalid_state_id, _BiIter()),
       _M_states(this->_M_nfa.size())
       { }
 
@@ -142,7 +142,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	_M_match_impl(_StateIdT __start);
 
       void
-      _M_rep_once_more(_StateIdT);
+      _M_nonreentrant_repeat(_StateIdT, _StateIdT);
 
       void
       _M_dfs(_StateIdT __start);
@@ -204,7 +204,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     public:
       _ResultsVec                                           _M_cur_results;
       _ResultsVec&                                          _M_results;
-      vector<pair<_BiIter, int>>                            _M_rep_count;
+      pair<_StateIdT, _BiIter>                              _M_last_rep_visit;
       _State_info<__algorithm, _ResultsVec>		    _M_states;
       // Do we have a solution so far?
       bool                                                  _M_has_sol;

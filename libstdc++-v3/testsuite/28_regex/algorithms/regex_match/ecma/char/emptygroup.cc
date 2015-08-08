@@ -39,10 +39,7 @@ test01()
     regex re("()*\\1");
     cmatch m;
     const char s[] = "";
-    VERIFY( regex_match_debug(s, m, re) );
-    VERIFY( m.size() == 2 );
-    VERIFY( m[0].matched );
-    VERIFY( m[1].matched );
+    VERIFY(!regex_match_debug(s, m, re) );
   }
   {
     regex re("()*");
@@ -51,6 +48,16 @@ test01()
     VERIFY( regex_match_debug(s, m, re) );
   }
   VERIFY(regex_match_debug("", regex("(?:)*")));
+
+  {
+    cmatch m;
+    regex re("(b*)*", regex_constants::ECMAScript);
+    VERIFY(regex_match("b", m, re));
+    VERIFY(m[0].matched);
+    VERIFY(m[0].str() == "b");
+    VERIFY(m[1].matched);
+    VERIFY(m[1].str() == "b");
+  }
 }
 
 int
