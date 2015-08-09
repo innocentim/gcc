@@ -115,6 +115,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _State<typename iterator_traits<_Bi_iter>::value_type>;
 
     protected:
+      template<_Search_mode __search_mode>
+	bool
+	_M_match_impl(_StateIdT __start);
+
       void
       _M_dfs(_StateIdT __state_id, _Head_type& __head);
 
@@ -150,30 +154,26 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     };
 
   /**
-   * @brief Takes a regex and an input string and does the matching.
-   *
-   * The %_Executor class has two modes: DFS mode and BFS mode, controlled
-   * by the template parameter %__dfs_mode.
+   * @brief Takes a regex and an input string and applies backtracking
+   * algorithm.
    */
-  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
-    class _Executor
+  template<typename _BiIter, typename _TraitsT>
+    class _Dfs_executor
     : private _Context<_BiIter, _TraitsT>,
-      private _Executor_mixin<_BiIter, _Executor<_BiIter, _TraitsT, __dfs_mode>>
+      private _Executor_mixin<_BiIter, _Dfs_executor<_BiIter, _TraitsT>>
     {
-      using __algorithm = integral_constant<bool, __dfs_mode>;
-      using __dfs = true_type;
-      using __bfs = false_type;
       using _Context_type = _Context<_BiIter, _TraitsT>;
-      using _State_type = _State<typename iterator_traits<_BiIter>::value_type>;
+      using _State_type =
+	  _State<typename iterator_traits<_BiIter>::value_type>;
       using _Head_type = _Match_head<_BiIter>;
 
     public:
       typedef std::vector<sub_match<_BiIter>>       _ResultsVec;
 
     public:
-      _Executor(_BiIter __begin, _BiIter __end, const _NFA<_TraitsT>& __nfa,
-		regex_constants::match_flag_type __flags,
-		_Search_mode __search_mode, sub_match<_BiIter>* __results)
+      _Dfs_executor(_BiIter __begin, _BiIter __end, const _NFA<_TraitsT>& __nfa,
+		    regex_constants::match_flag_type __flags,
+		    _Search_mode __search_mode, sub_match<_BiIter>* __results)
       : _Context_type(__begin, __end, __nfa, __flags, __search_mode),
       _M_head(this->_M_nfa._M_sub_count()),
       _M_results(__results), _M_last_rep_visit(_S_invalid_state_id, _BiIter()),
@@ -190,12 +190,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       template<_Search_mode __search_mode>
 	bool
 	_M_match()
-	{ return _M_match_impl<__search_mode>(this->_M_nfa._M_start()); }
+	{
+	  return this->template _M_match_impl<__search_mode>(
+	      this->_M_nfa._M_start());
+	}
 
     private:
-      template<_Search_mode __search_mode>
-	bool
-	_M_match_impl(_StateIdT __start);
+      bool
+      _M_search_from_first(_StateIdT __start);
 
       bool
       _M_handle_visit(_StateIdT __state_id)
@@ -216,62 +218,122 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       void
       _M_nonreentrant_repeat(_StateIdT, _StateIdT, _Head_type& __head);
 
-      bool
-      _M_main_dispatch(_StateIdT __start, __dfs);
+      struct _State_info
+      {
+	explicit
+	_State_info(size_t) { }
 
-      bool
-      _M_main_dispatch(_StateIdT __start, __bfs);
+	// Dummy implementations for DFS mode.
+	bool _M_visited(_StateIdT) const { return false; }
+	void _M_queue(_StateIdT, const _ResultsVec&) { }
 
-       // Holds additional information used in BFS-mode.
-      template<typename _Algorithm, typename _ResultsVec>
-	struct _State_info;
+	_BiIter* _M_get_sol_pos() { return &_M_sol_pos; }
 
-      template<typename _ResultsVec>
-	struct _State_info<__bfs, _ResultsVec>
-	{
-	  explicit
-	  _State_info(size_t __n) : _M_visited_states(new bool[__n]()) { }
-
-	  bool _M_visited(_StateIdT __i)
-	  {
-	    if (_M_visited_states[__i])
-	      return true;
-	    _M_visited_states[__i] = true;
-	    return false;
-	  }
-
-	  void _M_queue(_StateIdT __i, const _ResultsVec& __res)
-	  { _M_match_queue.emplace_back(__i, __res); }
-
-	  // Dummy implementations for BFS mode.
-	  _BiIter* _M_get_sol_pos() { return nullptr; }
-
-	  // Saves states that need to be considered for the next character.
-	  vector<pair<_StateIdT, _ResultsVec>>	_M_match_queue;
-	  // Indicates which states are already visited.
-	  unique_ptr<bool[]>			_M_visited_states;
-	};
-
-      template<typename _ResultsVec>
-	struct _State_info<__dfs, _ResultsVec>
-	{
-	  explicit
-	  _State_info(size_t) { }
-
-	  // Dummy implementations for DFS mode.
-	  bool _M_visited(_StateIdT) const { return false; }
-	  void _M_queue(_StateIdT, const _ResultsVec&) { }
-
-	  _BiIter* _M_get_sol_pos() { return &_M_sol_pos; }
-
-	  _BiIter   _M_sol_pos;
-	};
+	_BiIter   _M_sol_pos;
+      };
 
     public:
-      _Head_type                             _M_head;
-      sub_match<_BiIter>*                    _M_results;
-      pair<_StateIdT, _BiIter>               _M_last_rep_visit;
-      _State_info<__algorithm, _ResultsVec>  _M_states;
+      _Head_type		_M_head;
+      sub_match<_BiIter>*	_M_results;
+      pair<_StateIdT, _BiIter>	_M_last_rep_visit;
+      _State_info		_M_states;
+
+      template<typename _Bp, typename _Ep>
+	friend class _Executor_mixin;
+    };
+
+  /**
+   * @brief Takes a regex and an input string and applies Thompson NFA
+   * algorithm.
+   */
+  template<typename _Bi_iter, typename _TraitsT>
+    class _Bfs_executor
+    : private _Context<_Bi_iter, _TraitsT>,
+      private _Executor_mixin<_Bi_iter, _Bfs_executor<_Bi_iter, _TraitsT>>
+    {
+      using _Context_type = _Context<_Bi_iter, _TraitsT>;
+      using _State_type =
+	_State<typename iterator_traits<_Bi_iter>::value_type>;
+      using _Head_type = _Match_head<_Bi_iter>;
+
+    public:
+      typedef std::vector<sub_match<_Bi_iter>>       _ResultsVec;
+
+    public:
+      _Bfs_executor(_Bi_iter __begin, _Bi_iter __end,
+		    const _NFA<_TraitsT>& __nfa,
+		    regex_constants::match_flag_type __flags,
+		    _Search_mode __search_mode, sub_match<_Bi_iter>* __results)
+      : _Context_type(__begin, __end, __nfa, __flags, __search_mode),
+      _M_head(this->_M_nfa._M_sub_count()),
+      _M_results(__results), _M_states(this->_M_nfa.size())
+      { }
+
+      // __search_mode should be the same as this->_M_search_mode. It's
+      // slightly faster to let caller specify __search_mode again
+      // as a template argument.
+      // Still, in other places we prefer using the dynamic
+      // this->_M_search_mode,
+      // because it doesn't deserve being passed around as a template
+      // argument/function argument, since it's used in only a few places.
+      template<_Search_mode __search_mode>
+	bool
+	_M_match()
+	{
+	  return this->template _M_match_impl<__search_mode>(
+	      this->_M_nfa._M_start());
+	}
+
+    private:
+      bool
+      _M_search_from_first(_StateIdT __start);
+
+      bool
+      _M_handle_visit(_StateIdT __state_id)
+      { return _M_states._M_visited(__state_id); }
+
+      void
+      _M_handle_repeat(_StateIdT __state_id, _Head_type& __head);
+
+      void
+      _M_handle_match(const _State_type& __state, _Head_type& __head);
+
+      void
+      _M_handle_backref(const _State_type& __state, _Head_type& __head)
+      { __glibcxx_assert(false); }
+
+      void
+      _M_handle_accept(const _State_type& __state, _Head_type& __head);
+
+      struct _State_info
+      {
+	explicit
+	_State_info(size_t __n) : _M_visited_states(new bool[__n]()) { }
+
+	bool _M_visited(_StateIdT __i)
+	{
+	  if (_M_visited_states[__i])
+	    return true;
+	  _M_visited_states[__i] = true;
+	  return false;
+	}
+
+	void _M_queue(_StateIdT __i, const _ResultsVec& __res)
+	{ _M_match_queue.emplace_back(__i, __res); }
+
+	// Dummy implementations for BFS mode.
+	_Bi_iter* _M_get_sol_pos() { return nullptr; }
+
+	// Saves states that need to be considered for the next character.
+	vector<pair<_StateIdT, _ResultsVec>>	_M_match_queue;
+	// Indicates which states are already visited.
+	unique_ptr<bool[]>			_M_visited_states;
+      };
+
+    public:
+      _Head_type		_M_head;
+      sub_match<_Bi_iter>*      _M_results;
+      _State_info		_M_states;
 
       template<typename _Bp, typename _Ep>
 	friend class _Executor_mixin;

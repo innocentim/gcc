@@ -62,6 +62,33 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 
   template<typename _Bi_iter, typename _Executor_type>
+  template<_Search_mode __search_mode>
+    bool _Executor_mixin<_Bi_iter, _Executor_type>::
+    _M_match_impl(_StateIdT __start)
+    {
+      if (__search_mode == _Search_mode::_Match)
+	{
+	  _M_this()->_M_current = _M_this()->_M_begin;
+	  return _M_this()->_M_search_from_first(__start);
+	}
+
+      _M_this()->_M_current = _M_this()->_M_begin;
+      if (_M_this()->_M_search_from_first(__start))
+	return true;
+      if (_M_this()->_M_match_flags & regex_constants::match_continuous)
+	return false;
+      _M_this()->_M_match_flags |= regex_constants::match_prev_avail;
+      while (_M_this()->_M_begin != _M_this()->_M_end)
+	{
+	  ++_M_this()->_M_begin;
+	  _M_this()->_M_current = _M_this()->_M_begin;
+	  if (_M_this()->_M_search_from_first(__start))
+	    return true;
+	}
+      return false;
+    }
+
+  template<typename _Bi_iter, typename _Executor_type>
     void _Executor_mixin<_Bi_iter, _Executor_type>::
     _M_dfs(_StateIdT __state_id, _Head_type& __head)
     {
@@ -199,39 +226,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
     }
 
-  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
-  template<_Search_mode __search_mode>
-    bool _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_match_impl(_StateIdT __start)
-    {
-      if (__search_mode == _Search_mode::_Match)
-	{
-	  this->_M_current = this->_M_begin;
-	  return _M_main_dispatch(__start, __algorithm{});
-	}
-
-      this->_M_current = this->_M_begin;
-      if (_M_main_dispatch(__start, __algorithm{}))
-	return true;
-      if (this->_M_match_flags & regex_constants::match_continuous)
-	return false;
-      this->_M_match_flags |= regex_constants::match_prev_avail;
-      while (this->_M_begin != this->_M_end)
-	{
-	  ++this->_M_begin;
-	  this->_M_current = this->_M_begin;
-	  if (_M_main_dispatch(__start, __algorithm{}))
-	    return true;
-	}
-      return false;
-    }
-
-  // The _M_main function operates in different modes, DFS mode or BFS mode,
-  // indicated by template parameter __dfs_mode, and dispatches to one of the
-  // _M_main_dispatch overloads.
-  //
-  // ------------------------------------------------------------
-  //
   // DFS mode:
   //
   // It applies a Depth-First-Search (aka backtracking) on given NFA and input
@@ -249,68 +243,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   // Time complexity: \Omega(match_length), O(2^(_M_nfa.size()))
   // Space complexity: \theta(match_results.size() + match_length)
   //
-  template<typename _BiIter, typename _TraitsT,
-	   bool __dfs_mode>
-    bool _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_main_dispatch(_StateIdT __start, __dfs)
+  template<typename _BiIter, typename _TraitsT>
+    bool _Dfs_executor<_BiIter, _TraitsT>::
+    _M_search_from_first(_StateIdT __start)
     {
       _M_head._M_has_sol = false;
       *_M_states._M_get_sol_pos() = _BiIter();
       this->_M_dfs(__start, _M_head);
       return _M_head._M_has_sol;
-    }
-
-  // ------------------------------------------------------------
-  //
-  // BFS mode:
-  //
-  // Russ Cox's article (http://swtch.com/~rsc/regexp/regexp1.html)
-  // explained this algorithm clearly.
-  //
-  // It first computes epsilon closure (states that can be achieved without
-  // consuming characters) for every state that's still matching,
-  // using the same DFS algorithm, but doesn't re-enter states (using
-  // _M_states._M_visited to check), nor follow _S_opcode_match.
-  //
-  // Then apply DFS using every _S_opcode_match (in _M_states._M_match_queue)
-  // as the start state.
-  //
-  // It significantly reduces potential duplicate states, so has a better
-  // upper bound; but it requires more overhead.
-  //
-  // Time complexity: \Omega(match_length * match_results.size())
-  //                  O(match_length * _M_nfa.size() * match_results.size())
-  // Space complexity: \Omega(_M_nfa.size() + match_results.size())
-  //                   O(_M_nfa.size() * match_results.size())
-  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
-    bool _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_main_dispatch(_StateIdT __start, __bfs)
-    {
-      _M_states._M_queue(__start, _M_head._M_captures);
-      bool __ret = false;
-      while (1)
-	{
-	  _M_head._M_has_sol = false;
-	  if (_M_states._M_match_queue.empty())
-	    break;
-	  std::fill_n(_M_states._M_visited_states.get(),
-		      this->_M_nfa.size(), false);
-	  auto __old_queue = std::move(_M_states._M_match_queue);
-	  for (auto& __task : __old_queue)
-	    {
-	      _M_head._M_captures = std::move(__task.second);
-	      this->_M_dfs(__task.first, _M_head);
-	    }
-	  if (this->_M_search_mode == _Search_mode::_Search)
-	    __ret |= _M_head._M_has_sol;
-	  if (this->_M_current == this->_M_end)
-	    break;
-	  ++this->_M_current;
-	}
-      if (this->_M_search_mode == _Search_mode::_Match)
-	__ret = _M_head._M_has_sol;
-      _M_states._M_match_queue.clear();
-      return __ret;
     }
 
   // ECMAScript 262 [21.2.2.5.1] Note 4:
@@ -319,8 +259,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   // considered for further repetitions.
   //
   // POSIX doesn't specify this, so let's keep them consistent.
-  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
-    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
+  template<typename _BiIter, typename _TraitsT>
+    void _Dfs_executor<_BiIter, _TraitsT>::
     _M_nonreentrant_repeat(_StateIdT __i, _StateIdT __alt, _Head_type& __head)
     {
       auto __back = _M_last_rep_visit;
@@ -329,8 +269,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_last_rep_visit = std::move(__back);
     };
 
-  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
-    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
+  template<typename _BiIter, typename _TraitsT>
+    void _Dfs_executor<_BiIter, _TraitsT>::
     _M_handle_repeat(_StateIdT __state_id, _Head_type& __head)
     {
       // The most recent repeated state visit is the same, and this->_M_current
@@ -344,61 +284,36 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{
 	  _M_nonreentrant_repeat(__state_id, __state._M_alt, __head);
 	  // If it's DFS executor and already accepted, we're done.
-	  if (!__dfs_mode || !__head._M_has_sol)
+	  if (!__head._M_has_sol)
 	    this->_M_dfs(__state._M_next, __head);
 	}
       else // Non-greedy mode
 	{
-	  if (__dfs_mode)
-	    {
-	      // vice-versa.
-	      this->_M_dfs(__state._M_next, __head);
-	      if (!__head._M_has_sol)
-		_M_nonreentrant_repeat(__state_id, __state._M_alt, __head);
-	    }
-	  else
-	    {
-	      // DON'T attempt anything, because there's already another
-	      // state with higher priority accepted. This state cannot
-	      // be better by attempting its next node.
-	      if (!__head._M_has_sol)
-		{
-		  this->_M_dfs(__state._M_next, __head);
-		  // DON'T attempt anything if it's already accepted. An
-		  // accepted state *must* be better than a solution that
-		  // matches a non-greedy quantifier one more time.
-		  if (!__head._M_has_sol)
-		    _M_nonreentrant_repeat(__state_id, __state._M_alt, __head);
-		}
-	    }
+	  // vice-versa.
+	  this->_M_dfs(__state._M_next, __head);
+	  if (!__head._M_has_sol)
+	    _M_nonreentrant_repeat(__state_id, __state._M_alt, __head);
 	}
     }
 
-  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
-    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
+  template<typename _BiIter, typename _TraitsT>
+    void _Dfs_executor<_BiIter, _TraitsT>::
     _M_handle_match(const _State_type& __state, _Head_type& __head)
     {
       if (this->_M_current == this->_M_end)
 	return;
-      if (__dfs_mode)
+      if (__state._M_matches(*this->_M_current))
 	{
-	  if (__state._M_matches(*this->_M_current))
-	    {
-	      ++this->_M_current;
-	      this->_M_dfs(__state._M_next, __head);
-	      --this->_M_current;
-	    }
+	  ++this->_M_current;
+	  this->_M_dfs(__state._M_next, __head);
+	  --this->_M_current;
 	}
-      else
-	if (__state._M_matches(*this->_M_current))
-	  _M_states._M_queue(__state._M_next, __head._M_captures);
     }
 
-  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
-    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
+  template<typename _BiIter, typename _TraitsT>
+    void _Dfs_executor<_BiIter, _TraitsT>::
     _M_handle_backref(const _State_type& __state, _Head_type& __head)
     {
-      __glibcxx_assert(__dfs_mode);
       auto& __submatch = __head._M_captures[__state._M_backref_index];
       if (__submatch.matched)
 	{
@@ -435,56 +350,147 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
     }
 
-  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
-    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
+  template<typename _BiIter, typename _TraitsT>
+    void _Dfs_executor<_BiIter, _TraitsT>::
     _M_handle_accept(const _State_type& __state, _Head_type& __head)
     {
-      if (__dfs_mode)
+      __glibcxx_assert(!__head._M_has_sol);
+      if (this->_M_search_mode == _Search_mode::_Match)
+	__head._M_has_sol = this->_M_current == this->_M_end;
+      else
+	__head._M_has_sol = true;
+      if (this->_M_current == this->_M_begin
+	  && (this->_M_match_flags & regex_constants::match_not_null))
+	__head._M_has_sol = false;
+      if (__head._M_has_sol)
 	{
-	  __glibcxx_assert(!__head._M_has_sol);
-	  if (this->_M_search_mode == _Search_mode::_Match)
-	    __head._M_has_sol = this->_M_current == this->_M_end;
-	  else
-	    __head._M_has_sol = true;
-	  if (this->_M_current == this->_M_begin
-	      && (this->_M_match_flags & regex_constants::match_not_null))
-	    __head._M_has_sol = false;
-	  if (__head._M_has_sol)
+	  if (this->_M_nfa._M_options() & regex_constants::ECMAScript)
+	    std::copy(__head._M_captures.begin(),
+		      __head._M_captures.end(), _M_results);
+	  else // POSIX
 	    {
-	      if (this->_M_nfa._M_options() & regex_constants::ECMAScript)
-		std::copy(__head._M_captures.begin(),
-			  __head._M_captures.end(), _M_results);
-	      else // POSIX
+	      __glibcxx_assert(_M_states._M_get_sol_pos());
+	      // TODO: This isn't entirely correct. Implement leftmost
+	      // longest for POSIX.
+	      if (*_M_states._M_get_sol_pos() == _BiIter()
+		  || std::distance(this->_M_begin,
+				   *_M_states._M_get_sol_pos())
+		     < std::distance(this->_M_begin, this->_M_current))
 		{
-		  __glibcxx_assert(_M_states._M_get_sol_pos());
-		  // TODO: This isn't entirely correct. Implement leftmost
-		  // longest for POSIX.
-		  if (*_M_states._M_get_sol_pos() == _BiIter()
-		      || std::distance(this->_M_begin,
-				       *_M_states._M_get_sol_pos())
-			 < std::distance(this->_M_begin, this->_M_current))
-		    {
-		      *_M_states._M_get_sol_pos() = this->_M_current;
-		      std::copy(__head._M_captures.begin(),
-				__head._M_captures.end(), _M_results);
-		    }
+		  *_M_states._M_get_sol_pos() = this->_M_current;
+		  std::copy(__head._M_captures.begin(),
+			    __head._M_captures.end(), _M_results);
 		}
 	    }
 	}
-      else
+    }
+
+  // ------------------------------------------------------------
+  //
+  // BFS mode:
+  //
+  // Russ Cox's article (http://swtch.com/~rsc/regexp/regexp1.html)
+  // explained this algorithm clearly.
+  //
+  // It first computes epsilon closure (states that can be achieved without
+  // consuming characters) for every state that's still matching,
+  // using the same DFS algorithm, but doesn't re-enter states (using
+  // _M_states._M_visited to check), nor follow _S_opcode_match.
+  //
+  // Then apply DFS using every _S_opcode_match (in _M_states._M_match_queue)
+  // as the start state.
+  //
+  // It significantly reduces potential duplicate states, so has a better
+  // upper bound; but it requires more overhead.
+  //
+  // Time complexity: \Omega(match_length * match_results.size())
+  //                  O(match_length * _M_nfa.size() * match_results.size())
+  // Space complexity: \Omega(_M_nfa.size() + match_results.size())
+  //                   O(_M_nfa.size() * match_results.size())
+  template<typename _BiIter, typename _TraitsT>
+    bool _Bfs_executor<_BiIter, _TraitsT>::
+    _M_search_from_first(_StateIdT __start)
+    {
+      _M_states._M_queue(__start, _M_head._M_captures);
+      bool __ret = false;
+      while (1)
 	{
-	  if (this->_M_current == this->_M_begin
-	      && (this->_M_match_flags & regex_constants::match_not_null))
-	    return;
-	  if (this->_M_search_mode == _Search_mode::_Search
-	      || this->_M_current == this->_M_end)
-	    if (!__head._M_has_sol)
-	      {
-		__head._M_has_sol = true;
-		std::copy(__head._M_captures.begin(),
-			  __head._M_captures.end(), _M_results);
-	      }
+	  _M_head._M_has_sol = false;
+	  if (_M_states._M_match_queue.empty())
+	    break;
+	  std::fill_n(_M_states._M_visited_states.get(),
+		      this->_M_nfa.size(), false);
+	  auto __old_queue = std::move(_M_states._M_match_queue);
+	  for (auto& __task : __old_queue)
+	    {
+	      _M_head._M_captures = std::move(__task.second);
+	      this->_M_dfs(__task.first, _M_head);
+	    }
+	  if (this->_M_search_mode == _Search_mode::_Search)
+	    __ret |= _M_head._M_has_sol;
+	  if (this->_M_current == this->_M_end)
+	    break;
+	  ++this->_M_current;
 	}
+      if (this->_M_search_mode == _Search_mode::_Match)
+	__ret = _M_head._M_has_sol;
+      _M_states._M_match_queue.clear();
+      return __ret;
+    }
+
+  template<typename _BiIter, typename _TraitsT>
+    void _Bfs_executor<_BiIter, _TraitsT>::
+    _M_handle_repeat(_StateIdT __state_id, _Head_type& __head)
+    {
+      const auto& __state = this->_M_nfa[__state_id];
+      // Greedy.
+      if (!__state._M_neg)
+	{
+	  this->_M_dfs(__state._M_alt, __head);
+	  this->_M_dfs(__state._M_next, __head);
+	}
+      else // Non-greedy mode
+	{
+	  // DON'T attempt anything, because there's already another
+	  // state with higher priority accepted. This state cannot
+	  // be better by attempting its next node.
+	  if (!__head._M_has_sol)
+	    {
+	      this->_M_dfs(__state._M_next, __head);
+	      // DON'T attempt anything if it's already accepted. An
+	      // accepted state *must* be better than a solution that
+	      // matches a non-greedy quantifier one more time.
+	      if (!__head._M_has_sol)
+		this->_M_dfs(__state._M_alt, __head);
+	    }
+	}
+    }
+
+  template<typename _BiIter, typename _TraitsT>
+    void _Bfs_executor<_BiIter, _TraitsT>::
+    _M_handle_match(const _State_type& __state, _Head_type& __head)
+    {
+      if (this->_M_current == this->_M_end)
+	return;
+      if (__state._M_matches(*this->_M_current))
+	_M_states._M_queue(__state._M_next, __head._M_captures);
+    }
+
+  template<typename _BiIter, typename _TraitsT>
+    void _Bfs_executor<_BiIter, _TraitsT>::
+    _M_handle_accept(const _State_type& __state, _Head_type& __head)
+    {
+      if (this->_M_current == this->_M_begin
+	  && (this->_M_match_flags & regex_constants::match_not_null))
+	return;
+      if (this->_M_search_mode == _Search_mode::_Search
+	  || this->_M_current == this->_M_end)
+	if (!__head._M_has_sol)
+	  {
+	    __head._M_has_sol = true;
+	    std::copy(__head._M_captures.begin(),
+		      __head._M_captures.end(), _M_results);
+	  }
     }
 
 _GLIBCXX_END_NAMESPACE_VERSION
