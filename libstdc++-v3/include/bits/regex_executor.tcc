@@ -99,8 +99,107 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
     }
 
-  template<typename _BiIter, typename _TraitsT,
-	   bool __dfs_mode>
+  template<typename _Bi_iter, typename _Executor_type>
+    void _Executor_mixin<_Bi_iter, _Executor_type>::
+    _M_handle_subexpr_begin(const _State_type& __state, _Head_type& __head)
+    {
+      auto& __res = __head._M_captures[__state._M_subexpr];
+      auto __back = __res.first;
+      __res.first = _M_this()->_M_current;
+      this->_M_dfs(__state._M_next, __head);
+      __res.first = __back;
+    }
+
+  template<typename _Bi_iter, typename _Executor_type>
+    void _Executor_mixin<_Bi_iter, _Executor_type>::
+    _M_handle_subexpr_end(const _State_type& __state, _Head_type& __head)
+    {
+      auto& __res = __head._M_captures[__state._M_subexpr];
+      auto __back = __res;
+      __res.second = _M_this()->_M_current;
+      __res.matched = true;
+      this->_M_dfs(__state._M_next, __head);
+      __res = __back;
+    }
+
+  template<typename _Bi_iter, typename _Executor_type>
+    void _Executor_mixin<_Bi_iter, _Executor_type>::
+    _M_handle_line_begin_assertion(const _State_type& __state,
+				   _Head_type& __head)
+    {
+      if (_M_this()->_M_at_begin())
+	this->_M_dfs(__state._M_next, __head);
+    }
+
+  template<typename _Bi_iter, typename _Executor_type>
+    void _Executor_mixin<_Bi_iter, _Executor_type>::
+    _M_handle_line_end_assertion(const _State_type& __state, _Head_type& __head)
+    {
+      if (_M_this()->_M_at_end())
+	this->_M_dfs(__state._M_next, __head);
+    }
+
+  template<typename _Bi_iter, typename _Executor_type>
+    void _Executor_mixin<_Bi_iter, _Executor_type>::
+    _M_handle_word_boundary(const _State_type& __state, _Head_type& __head)
+    {
+      if (_M_this()->_M_word_boundary() == !__state._M_neg)
+	this->_M_dfs(__state._M_next, __head);
+    }
+
+  template<typename _Bi_iter, typename _Executor_type>
+    void _Executor_mixin<_Bi_iter, _Executor_type>::
+    _M_handle_subexpr_lookahead(const _State_type& __state, _Head_type& __head)
+    {
+      // Return whether now match the given sub-NFA.
+      const auto __lookahead = [this](_StateIdT __next, _Head_type& __head)
+      {
+	vector<sub_match<_Bi_iter>> __what(__head._M_captures.size());
+	_Executor_type __sub(
+	  _M_this()->_M_current, _M_this()->_M_end, _M_this()->_M_nfa,
+	  _M_this()->_M_match_flags | regex_constants::match_continuous,
+	  _Search_mode::_Search, __what.data());
+	if (__sub.template _M_match_impl<_Search_mode::_Search>(__next))
+	  {
+	    for (size_t __i = 0; __i < __what.size(); __i++)
+	      if (__what[__i].matched)
+		__head._M_captures[__i] = __what[__i];
+	    return true;
+	  }
+	return false;
+      };
+
+      // Here __state._M_alt offers a single start node for a sub-NFA.
+      // We recursively invoke our algorithm to match the sub-NFA.
+      if (__lookahead(__state._M_alt, __head) == !__state._M_neg)
+	this->_M_dfs(__state._M_next, __head);
+    }
+
+  template<typename _Bi_iter, typename _Executor_type>
+    void _Executor_mixin<_Bi_iter, _Executor_type>::
+    _M_handle_alternative(const _State_type& __state, _Head_type& __head)
+    {
+      if (_M_this()->_M_nfa._M_options() & regex_constants::ECMAScript)
+	{
+	  // TODO: Fix BFS support. It is wrong.
+	  this->_M_dfs(__state._M_alt, __head);
+	  // Pick lhs if it matches. Only try rhs if it doesn't.
+	  if (!__head._M_has_sol)
+	    this->_M_dfs(__state._M_next, __head);
+	}
+      else
+	{
+	  // Try both and compare the result.
+	  // See "case _S_opcode_accept:" handling above.
+	  this->_M_dfs(__state._M_alt, __head);
+	  auto __has_sol = __head._M_has_sol;
+	  __head._M_has_sol = false;
+	  this->_M_dfs(__state._M_next, __head);
+	  __head._M_has_sol |= __has_sol;
+	}
+    }
+
+  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
   template<_Search_mode __search_mode>
     bool _Executor<_BiIter, _TraitsT, __dfs_mode>::
     _M_match_impl(_StateIdT __start)
@@ -277,82 +376,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
     void _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_handle_subexpr_begin(const _State_type& __state, _Head_type& __head)
-    {
-      auto& __res = __head._M_captures[__state._M_subexpr];
-      auto __back = __res.first;
-      __res.first = this->_M_current;
-      this->_M_dfs(__state._M_next, __head);
-      __res.first = __back;
-    }
-
-  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
-    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_handle_subexpr_end(const _State_type& __state, _Head_type& __head)
-    {
-      auto& __res = __head._M_captures[__state._M_subexpr];
-      auto __back = __res;
-      __res.second = this->_M_current;
-      __res.matched = true;
-      this->_M_dfs(__state._M_next, __head);
-      __res = __back;
-    }
-
-  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
-    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_handle_line_begin_assertion(const _State_type& __state,
-				   _Head_type& __head)
-    {
-      if (this->_M_at_begin())
-	this->_M_dfs(__state._M_next, __head);
-    }
-
-  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
-    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_handle_line_end_assertion(const _State_type& __state, _Head_type& __head)
-    {
-      if (this->_M_at_end())
-	this->_M_dfs(__state._M_next, __head);
-    }
-
-  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
-    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_handle_word_boundary(const _State_type& __state, _Head_type& __head)
-    {
-      if (this->_M_word_boundary() == !__state._M_neg)
-	this->_M_dfs(__state._M_next, __head);
-    }
-
-  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
-    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_handle_subexpr_lookahead(const _State_type& __state, _Head_type& __head)
-    {
-      // Return whether now match the given sub-NFA.
-      const auto __lookahead = [this](_StateIdT __next, _Head_type& __head)
-      {
-	_ResultsVec __what(__head._M_captures.size());
-	_Executor __sub(
-	  this->_M_current, this->_M_end, this->_M_nfa,
-	  this->_M_match_flags | regex_constants::match_continuous,
-	  _Search_mode::_Search, __what.data());
-	if (__sub._M_match_impl<_Search_mode::_Search>(__next))
-	  {
-	    for (size_t __i = 0; __i < __what.size(); __i++)
-	      if (__what[__i].matched)
-		__head._M_captures[__i] = __what[__i];
-	    return true;
-	  }
-	return false;
-      };
-
-      // Here __state._M_alt offers a single start node for a sub-NFA.
-      // We recursively invoke our algorithm to match the sub-NFA.
-      if (__lookahead(__state._M_alt, __head) == !__state._M_neg)
-	this->_M_dfs(__state._M_next, __head);
-    }
-
-  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
-    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
     _M_handle_match(const _State_type& __state, _Head_type& __head)
     {
       if (this->_M_current == this->_M_end)
@@ -461,30 +484,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		std::copy(__head._M_captures.begin(),
 			  __head._M_captures.end(), _M_results);
 	      }
-	}
-    }
-
-  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
-    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_handle_alternative(const _State_type& __state, _Head_type& __head)
-    {
-      if (this->_M_nfa._M_options() & regex_constants::ECMAScript)
-	{
-	  // TODO: Fix BFS support. It is wrong.
-	  this->_M_dfs(__state._M_alt, __head);
-	  // Pick lhs if it matches. Only try rhs if it doesn't.
-	  if (!__head._M_has_sol)
-	    this->_M_dfs(__state._M_next, __head);
-	}
-      else
-	{
-	  // Try both and compare the result.
-	  // See "case _S_opcode_accept:" handling above.
-	  this->_M_dfs(__state._M_alt, __head);
-	  auto __has_sol = __head._M_has_sol;
-	  __head._M_has_sol = false;
-	  this->_M_dfs(__state._M_next, __head);
-	  __head._M_has_sol |= __has_sol;
 	}
     }
 

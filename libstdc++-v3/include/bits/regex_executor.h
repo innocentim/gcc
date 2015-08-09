@@ -111,10 +111,37 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     class _Executor_mixin
     {
       using _Head_type = _Match_head<_Bi_iter>;
+      using _State_type =
+	  _State<typename iterator_traits<_Bi_iter>::value_type>;
 
     protected:
       void
       _M_dfs(_StateIdT __state_id, _Head_type& __head);
+
+      void
+      _M_handle_subexpr_begin(const _State_type& __state, _Head_type& __head);
+
+      void
+      _M_handle_subexpr_end(const _State_type& __state, _Head_type& __head);
+
+      void
+      _M_handle_line_begin_assertion(const _State_type& __state,
+				     _Head_type& __head);
+
+      void
+      _M_handle_line_end_assertion(const _State_type& __state,
+				   _Head_type& __head);
+
+      void
+      _M_handle_word_boundary(const _State_type& __state, _Head_type& __head);
+
+      void
+      _M_handle_subexpr_lookahead(const _State_type& __state,
+				  _Head_type& __head);
+
+      void
+      _M_handle_alternative(const _State_type& __state,
+			    _Head_type& __head);
 
     private:
       _Executor*
@@ -175,41 +202,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { return _M_states._M_visited(__state_id); }
 
       void
-      _M_handle_repeat(_StateIdT __state_id, _Head_type& __Head);
+      _M_handle_repeat(_StateIdT __state_id, _Head_type& __head);
 
       void
-      _M_handle_subexpr_begin(const _State_type& __state, _Head_type& __Head);
+      _M_handle_match(const _State_type& __state, _Head_type& __head);
 
       void
-      _M_handle_subexpr_end(const _State_type& __state, _Head_type& __Head);
+      _M_handle_backref(const _State_type& __state, _Head_type& __head);
 
       void
-      _M_handle_line_begin_assertion(const _State_type& __state,
-				     _Head_type& __Head);
-
-      void
-      _M_handle_line_end_assertion(const _State_type& __state,
-				   _Head_type& __Head);
-
-      void
-      _M_handle_word_boundary(const _State_type& __state, _Head_type& __Head);
-
-      void
-      _M_handle_subexpr_lookahead(const _State_type& __state,
-				  _Head_type& __Head);
-
-      void
-      _M_handle_match(const _State_type& __state, _Head_type& __Head);
-
-      void
-      _M_handle_backref(const _State_type& __state, _Head_type& __Head);
-
-      void
-      _M_handle_accept(const _State_type& __state, _Head_type& __Head);
-
-      void
-      _M_handle_alternative(const _State_type& __state,
-			    _Head_type& __Head);
+      _M_handle_accept(const _State_type& __state, _Head_type& __head);
 
       void
       _M_nonreentrant_repeat(_StateIdT, _StateIdT, _Head_type& __head);
