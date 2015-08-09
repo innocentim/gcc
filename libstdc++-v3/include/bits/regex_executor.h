@@ -97,12 +97,24 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _Search_mode                      _M_search_mode;
     };
 
-  template<typename _Executor>
+  template<typename _Bi_iter>
+    struct _Match_head
+    {
+      _Match_head(size_t __sub_count)
+      : _M_captures(__sub_count), _M_has_sol(false) { }
+
+      vector<sub_match<_Bi_iter>>  _M_captures;
+      bool                         _M_has_sol;
+    };
+
+  template<typename _Bi_iter, typename _Executor>
     class _Executor_mixin
     {
+      using _Head_type = _Match_head<_Bi_iter>;
+
     protected:
       void
-      _M_dfs(_StateIdT __state_id);
+      _M_dfs(_StateIdT __state_id, _Head_type& __head);
 
     private:
       _Executor*
@@ -119,13 +131,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
     class _Executor
     : private _Context<_BiIter, _TraitsT>,
-      private _Executor_mixin<_Executor<_BiIter, _TraitsT, __dfs_mode>>
+      private _Executor_mixin<_BiIter, _Executor<_BiIter, _TraitsT, __dfs_mode>>
     {
       using __algorithm = integral_constant<bool, __dfs_mode>;
       using __dfs = true_type;
       using __bfs = false_type;
       using _Context_type = _Context<_BiIter, _TraitsT>;
       using _State_type = _State<typename iterator_traits<_BiIter>::value_type>;
+      using _Head_type = _Match_head<_BiIter>;
 
     public:
       typedef std::vector<sub_match<_BiIter>>       _ResultsVec;
@@ -135,7 +148,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		regex_constants::match_flag_type __flags,
 		_Search_mode __search_mode, sub_match<_BiIter>* __results)
       : _Context_type(__begin, __end, __nfa, __flags, __search_mode),
-      _M_cur_results(this->_M_nfa._M_sub_count()),
+      _M_head(this->_M_nfa._M_sub_count()),
       _M_results(__results), _M_last_rep_visit(_S_invalid_state_id, _BiIter()),
       _M_states(this->_M_nfa.size())
       { }
@@ -162,40 +175,44 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { return _M_states._M_visited(__state_id); }
 
       void
-      _M_handle_repeat(_StateIdT __state_id);
+      _M_handle_repeat(_StateIdT __state_id, _Head_type& __Head);
 
       void
-      _M_handle_subexpr_begin(const _State_type& __state);
+      _M_handle_subexpr_begin(const _State_type& __state, _Head_type& __Head);
 
       void
-      _M_handle_subexpr_end(const _State_type& __state);
+      _M_handle_subexpr_end(const _State_type& __state, _Head_type& __Head);
 
       void
-      _M_handle_line_begin_assertion(const _State_type& __state);
+      _M_handle_line_begin_assertion(const _State_type& __state,
+				     _Head_type& __Head);
 
       void
-      _M_handle_line_end_assertion(const _State_type& __state);
+      _M_handle_line_end_assertion(const _State_type& __state,
+				   _Head_type& __Head);
 
       void
-      _M_handle_word_boundary(const _State_type& __state);
+      _M_handle_word_boundary(const _State_type& __state, _Head_type& __Head);
 
       void
-      _M_handle_subexpr_lookahead(const _State_type& __state);
+      _M_handle_subexpr_lookahead(const _State_type& __state,
+				  _Head_type& __Head);
 
       void
-      _M_handle_match(const _State_type& __state);
+      _M_handle_match(const _State_type& __state, _Head_type& __Head);
 
       void
-      _M_handle_backref(const _State_type& __state);
+      _M_handle_backref(const _State_type& __state, _Head_type& __Head);
 
       void
-      _M_handle_accept(const _State_type& __state);
+      _M_handle_accept(const _State_type& __state, _Head_type& __Head);
 
       void
-      _M_handle_alternative(const _State_type& __state);
+      _M_handle_alternative(const _State_type& __state,
+			    _Head_type& __Head);
 
       void
-      _M_nonreentrant_repeat(_StateIdT, _StateIdT);
+      _M_nonreentrant_repeat(_StateIdT, _StateIdT, _Head_type& __head);
 
       bool
       _M_main_dispatch(_StateIdT __start, __dfs);
@@ -249,14 +266,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	};
 
     public:
-      _ResultsVec                                           _M_cur_results;
-      sub_match<_BiIter>*                                   _M_results;
-      pair<_StateIdT, _BiIter>                              _M_last_rep_visit;
-      _State_info<__algorithm, _ResultsVec>		    _M_states;
-      // Do we have a solution so far?
-      bool                                                  _M_has_sol;
+      _Head_type                             _M_head;
+      sub_match<_BiIter>*                    _M_results;
+      pair<_StateIdT, _BiIter>               _M_last_rep_visit;
+      _State_info<__algorithm, _ResultsVec>  _M_states;
 
-      template<typename _Ep>
+      template<typename _Bp, typename _Ep>
 	friend class _Executor_mixin;
     };
 

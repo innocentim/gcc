@@ -61,9 +61,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return false;
     }
 
-  template<typename _Executor_type>
-    void _Executor_mixin<_Executor_type>::
-    _M_dfs(_StateIdT __state_id)
+  template<typename _Bi_iter, typename _Executor_type>
+    void _Executor_mixin<_Bi_iter, _Executor_type>::
+    _M_dfs(_StateIdT __state_id, _Head_type& __head)
     {
       if (_M_this()->_M_handle_visit(__state_id))
 	return;
@@ -72,27 +72,27 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       switch (__state._M_opcode())
 	{
 	  case _S_opcode_repeat:
-	    return _M_this()->_M_handle_repeat(__state_id);
+	    return _M_this()->_M_handle_repeat(__state_id, __head);
 	  case _S_opcode_subexpr_begin:
-	    return _M_this()->_M_handle_subexpr_begin(__state);
+	    return _M_this()->_M_handle_subexpr_begin(__state, __head);
 	  case _S_opcode_subexpr_end:
-	    return _M_this()->_M_handle_subexpr_end(__state);
+	    return _M_this()->_M_handle_subexpr_end(__state, __head);
 	  case _S_opcode_line_begin_assertion:
-	    return _M_this()->_M_handle_line_begin_assertion(__state);
+	    return _M_this()->_M_handle_line_begin_assertion(__state, __head);
 	  case _S_opcode_line_end_assertion:
-	    return _M_this()->_M_handle_line_end_assertion(__state);
+	    return _M_this()->_M_handle_line_end_assertion(__state, __head);
 	  case _S_opcode_word_boundary:
-	    return _M_this()->_M_handle_word_boundary(__state);
+	    return _M_this()->_M_handle_word_boundary(__state, __head);
 	  case _S_opcode_subexpr_lookahead:
-	    return _M_this()->_M_handle_subexpr_lookahead(__state);
+	    return _M_this()->_M_handle_subexpr_lookahead(__state, __head);
 	  case _S_opcode_match:
-	    return _M_this()->_M_handle_match(__state);
+	    return _M_this()->_M_handle_match(__state, __head);
 	  case _S_opcode_backref:
-	    return _M_this()->_M_handle_backref(__state);
+	    return _M_this()->_M_handle_backref(__state, __head);
 	  case _S_opcode_accept:
-	    return _M_this()->_M_handle_accept(__state);
+	    return _M_this()->_M_handle_accept(__state, __head);
 	  case _S_opcode_alternative:
-	    return _M_this()->_M_handle_alternative(__state);
+	    return _M_this()->_M_handle_alternative(__state, __head);
 	  case _S_opcode_unknown:
 	  case _S_opcode_dummy:
 	    __glibcxx_assert(false);
@@ -155,10 +155,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     bool _Executor<_BiIter, _TraitsT, __dfs_mode>::
     _M_main_dispatch(_StateIdT __start, __dfs)
     {
-      _M_has_sol = false;
+      _M_head._M_has_sol = false;
       *_M_states._M_get_sol_pos() = _BiIter();
-      this->_M_dfs(__start);
-      return _M_has_sol;
+      this->_M_dfs(__start, _M_head);
+      return _M_head._M_has_sol;
     }
 
   // ------------------------------------------------------------
@@ -187,11 +187,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     bool _Executor<_BiIter, _TraitsT, __dfs_mode>::
     _M_main_dispatch(_StateIdT __start, __bfs)
     {
-      _M_states._M_queue(__start, _M_cur_results);
+      _M_states._M_queue(__start, _M_head._M_captures);
       bool __ret = false;
       while (1)
 	{
-	  _M_has_sol = false;
+	  _M_head._M_has_sol = false;
 	  if (_M_states._M_match_queue.empty())
 	    break;
 	  std::fill_n(_M_states._M_visited_states.get(),
@@ -199,17 +199,17 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  auto __old_queue = std::move(_M_states._M_match_queue);
 	  for (auto& __task : __old_queue)
 	    {
-	      _M_cur_results = std::move(__task.second);
-	      this->_M_dfs(__task.first);
+	      _M_head._M_captures = std::move(__task.second);
+	      this->_M_dfs(__task.first, _M_head);
 	    }
 	  if (this->_M_search_mode == _Search_mode::_Search)
-	    __ret |= _M_has_sol;
+	    __ret |= _M_head._M_has_sol;
 	  if (this->_M_current == this->_M_end)
 	    break;
 	  ++this->_M_current;
 	}
       if (this->_M_search_mode == _Search_mode::_Match)
-	__ret = _M_has_sol;
+	__ret = _M_head._M_has_sol;
       _M_states._M_match_queue.clear();
       return __ret;
     }
@@ -222,17 +222,17 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   // POSIX doesn't specify this, so let's keep them consistent.
   template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
     void _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_nonreentrant_repeat(_StateIdT __i, _StateIdT __alt)
+    _M_nonreentrant_repeat(_StateIdT __i, _StateIdT __alt, _Head_type& __head)
     {
       auto __back = _M_last_rep_visit;
       _M_last_rep_visit = make_pair(__i, this->_M_current);
-      this->_M_dfs(__alt);
+      this->_M_dfs(__alt, __head);
       _M_last_rep_visit = std::move(__back);
     };
 
   template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
     void _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_handle_repeat(_StateIdT __state_id)
+    _M_handle_repeat(_StateIdT __state_id, _Head_type& __head)
     {
       // The most recent repeated state visit is the same, and this->_M_current
       // doesn't change since then. Shouldn't continue dead looping.
@@ -243,33 +243,33 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       // Greedy.
       if (!__state._M_neg)
 	{
-	  _M_nonreentrant_repeat(__state_id, __state._M_alt);
+	  _M_nonreentrant_repeat(__state_id, __state._M_alt, __head);
 	  // If it's DFS executor and already accepted, we're done.
-	  if (!__dfs_mode || !_M_has_sol)
-	    this->_M_dfs(__state._M_next);
+	  if (!__dfs_mode || !__head._M_has_sol)
+	    this->_M_dfs(__state._M_next, __head);
 	}
       else // Non-greedy mode
 	{
 	  if (__dfs_mode)
 	    {
 	      // vice-versa.
-	      this->_M_dfs(__state._M_next);
-	      if (!_M_has_sol)
-		_M_nonreentrant_repeat(__state_id, __state._M_alt);
+	      this->_M_dfs(__state._M_next, __head);
+	      if (!__head._M_has_sol)
+		_M_nonreentrant_repeat(__state_id, __state._M_alt, __head);
 	    }
 	  else
 	    {
 	      // DON'T attempt anything, because there's already another
 	      // state with higher priority accepted. This state cannot
 	      // be better by attempting its next node.
-	      if (!_M_has_sol)
+	      if (!__head._M_has_sol)
 		{
-		  this->_M_dfs(__state._M_next);
+		  this->_M_dfs(__state._M_next, __head);
 		  // DON'T attempt anything if it's already accepted. An
 		  // accepted state *must* be better than a solution that
 		  // matches a non-greedy quantifier one more time.
-		  if (!_M_has_sol)
-		    _M_nonreentrant_repeat(__state_id, __state._M_alt);
+		  if (!__head._M_has_sol)
+		    _M_nonreentrant_repeat(__state_id, __state._M_alt, __head);
 		}
 	    }
 	}
@@ -277,59 +277,60 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
     void _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_handle_subexpr_begin(const _State_type& __state)
+    _M_handle_subexpr_begin(const _State_type& __state, _Head_type& __head)
     {
-      auto& __res = _M_cur_results[__state._M_subexpr];
+      auto& __res = __head._M_captures[__state._M_subexpr];
       auto __back = __res.first;
       __res.first = this->_M_current;
-      this->_M_dfs(__state._M_next);
+      this->_M_dfs(__state._M_next, __head);
       __res.first = __back;
     }
 
   template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
     void _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_handle_subexpr_end(const _State_type& __state)
+    _M_handle_subexpr_end(const _State_type& __state, _Head_type& __head)
     {
-      auto& __res = _M_cur_results[__state._M_subexpr];
+      auto& __res = __head._M_captures[__state._M_subexpr];
       auto __back = __res;
       __res.second = this->_M_current;
       __res.matched = true;
-      this->_M_dfs(__state._M_next);
+      this->_M_dfs(__state._M_next, __head);
       __res = __back;
     }
 
   template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
     void _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_handle_line_begin_assertion(const _State_type& __state)
+    _M_handle_line_begin_assertion(const _State_type& __state,
+				   _Head_type& __head)
     {
       if (this->_M_at_begin())
-	this->_M_dfs(__state._M_next);
+	this->_M_dfs(__state._M_next, __head);
     }
 
   template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
     void _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_handle_line_end_assertion(const _State_type& __state)
+    _M_handle_line_end_assertion(const _State_type& __state, _Head_type& __head)
     {
       if (this->_M_at_end())
-	this->_M_dfs(__state._M_next);
+	this->_M_dfs(__state._M_next, __head);
     }
 
   template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
     void _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_handle_word_boundary(const _State_type& __state)
+    _M_handle_word_boundary(const _State_type& __state, _Head_type& __head)
     {
       if (this->_M_word_boundary() == !__state._M_neg)
-	this->_M_dfs(__state._M_next);
+	this->_M_dfs(__state._M_next, __head);
     }
 
   template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
     void _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_handle_subexpr_lookahead(const _State_type& __state)
+    _M_handle_subexpr_lookahead(const _State_type& __state, _Head_type& __head)
     {
       // Return whether now match the given sub-NFA.
-      const auto __lookahead = [this](_StateIdT __next)
+      const auto __lookahead = [this](_StateIdT __next, _Head_type& __head)
       {
-	_ResultsVec __what(_M_cur_results.size());
+	_ResultsVec __what(__head._M_captures.size());
 	_Executor __sub(
 	  this->_M_current, this->_M_end, this->_M_nfa,
 	  this->_M_match_flags | regex_constants::match_continuous,
@@ -338,7 +339,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  {
 	    for (size_t __i = 0; __i < __what.size(); __i++)
 	      if (__what[__i].matched)
-		_M_cur_results[__i] = __what[__i];
+		__head._M_captures[__i] = __what[__i];
 	    return true;
 	  }
 	return false;
@@ -346,13 +347,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       // Here __state._M_alt offers a single start node for a sub-NFA.
       // We recursively invoke our algorithm to match the sub-NFA.
-      if (__lookahead(__state._M_alt) == !__state._M_neg)
-	this->_M_dfs(__state._M_next);
+      if (__lookahead(__state._M_alt, __head) == !__state._M_neg)
+	this->_M_dfs(__state._M_next, __head);
     }
 
   template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
     void _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_handle_match(const _State_type& __state)
+    _M_handle_match(const _State_type& __state, _Head_type& __head)
     {
       if (this->_M_current == this->_M_end)
 	return;
@@ -361,21 +362,21 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  if (__state._M_matches(*this->_M_current))
 	    {
 	      ++this->_M_current;
-	      this->_M_dfs(__state._M_next);
+	      this->_M_dfs(__state._M_next, __head);
 	      --this->_M_current;
 	    }
 	}
       else
 	if (__state._M_matches(*this->_M_current))
-	  _M_states._M_queue(__state._M_next, _M_cur_results);
+	  _M_states._M_queue(__state._M_next, __head._M_captures);
     }
 
   template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
     void _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_handle_backref(const _State_type& __state)
+    _M_handle_backref(const _State_type& __state, _Head_type& __head)
     {
       __glibcxx_assert(__dfs_mode);
-      auto& __submatch = _M_cur_results[__state._M_backref_index];
+      auto& __submatch = __head._M_captures[__state._M_backref_index];
       if (__submatch.matched)
 	{
 	  auto __last = this->_M_current;
@@ -398,7 +399,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    }
 	  auto __back = this->_M_current;
 	  this->_M_current = __last;
-	  this->_M_dfs(__state._M_next);
+	  this->_M_dfs(__state._M_next, __head);
 	  this->_M_current = std::move(__back);
 	}
       else
@@ -407,29 +408,29 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  // If the regular expression has n or more capturing parentheses
 	  // but the nth one is undefined because it has not captured
 	  // anything, then the backreference always succeeds.
-	  this->_M_dfs(__state._M_next);
+	  this->_M_dfs(__state._M_next, __head);
 	}
     }
 
   template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
     void _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_handle_accept(const _State_type& __state)
+    _M_handle_accept(const _State_type& __state, _Head_type& __head)
     {
       if (__dfs_mode)
 	{
-	  __glibcxx_assert(!_M_has_sol);
+	  __glibcxx_assert(!__head._M_has_sol);
 	  if (this->_M_search_mode == _Search_mode::_Match)
-	    _M_has_sol = this->_M_current == this->_M_end;
+	    __head._M_has_sol = this->_M_current == this->_M_end;
 	  else
-	    _M_has_sol = true;
+	    __head._M_has_sol = true;
 	  if (this->_M_current == this->_M_begin
 	      && (this->_M_match_flags & regex_constants::match_not_null))
-	    _M_has_sol = false;
-	  if (_M_has_sol)
+	    __head._M_has_sol = false;
+	  if (__head._M_has_sol)
 	    {
 	      if (this->_M_nfa._M_options() & regex_constants::ECMAScript)
-		std::copy(_M_cur_results.begin(),
-			  _M_cur_results.end(), _M_results);
+		std::copy(__head._M_captures.begin(),
+			  __head._M_captures.end(), _M_results);
 	      else // POSIX
 		{
 		  __glibcxx_assert(_M_states._M_get_sol_pos());
@@ -441,8 +442,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 			 < std::distance(this->_M_begin, this->_M_current))
 		    {
 		      *_M_states._M_get_sol_pos() = this->_M_current;
-		      std::copy(_M_cur_results.begin(),
-				_M_cur_results.end(), _M_results);
+		      std::copy(__head._M_captures.begin(),
+				__head._M_captures.end(), _M_results);
 		    }
 		}
 	    }
@@ -454,36 +455,36 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    return;
 	  if (this->_M_search_mode == _Search_mode::_Search
 	      || this->_M_current == this->_M_end)
-	    if (!_M_has_sol)
+	    if (!__head._M_has_sol)
 	      {
-		_M_has_sol = true;
-		std::copy(_M_cur_results.begin(),
-			  _M_cur_results.end(), _M_results);
+		__head._M_has_sol = true;
+		std::copy(__head._M_captures.begin(),
+			  __head._M_captures.end(), _M_results);
 	      }
 	}
     }
 
   template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
     void _Executor<_BiIter, _TraitsT, __dfs_mode>::
-    _M_handle_alternative(const _State_type& __state)
+    _M_handle_alternative(const _State_type& __state, _Head_type& __head)
     {
       if (this->_M_nfa._M_options() & regex_constants::ECMAScript)
 	{
 	  // TODO: Fix BFS support. It is wrong.
-	  this->_M_dfs(__state._M_alt);
+	  this->_M_dfs(__state._M_alt, __head);
 	  // Pick lhs if it matches. Only try rhs if it doesn't.
-	  if (!_M_has_sol)
-	    this->_M_dfs(__state._M_next);
+	  if (!__head._M_has_sol)
+	    this->_M_dfs(__state._M_next, __head);
 	}
       else
 	{
 	  // Try both and compare the result.
 	  // See "case _S_opcode_accept:" handling above.
-	  this->_M_dfs(__state._M_alt);
-	  auto __has_sol = _M_has_sol;
-	  _M_has_sol = false;
-	  this->_M_dfs(__state._M_next);
-	  _M_has_sol |= __has_sol;
+	  this->_M_dfs(__state._M_alt, __head);
+	  auto __has_sol = __head._M_has_sol;
+	  __head._M_has_sol = false;
+	  this->_M_dfs(__state._M_next, __head);
+	  __head._M_has_sol |= __has_sol;
 	}
     }
 
