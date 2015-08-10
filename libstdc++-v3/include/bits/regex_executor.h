@@ -176,8 +176,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		    _Search_mode __search_mode, sub_match<_BiIter>* __results)
       : _Context_type(__begin, __end, __nfa, __flags, __search_mode),
       _M_head(this->_M_nfa._M_sub_count()),
-      _M_results(__results), _M_last_rep_visit(_S_invalid_state_id, _BiIter()),
-      _M_states(this->_M_nfa.size())
+      _M_results(__results), _M_last_rep_visit(_S_invalid_state_id, _BiIter())
       { }
 
       // __search_mode should be the same as this->_M_search_mode. It's
@@ -201,7 +200,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       bool
       _M_handle_visit(_StateIdT __state_id)
-      { return _M_states._M_visited(__state_id); }
+      { return false; }
 
       void
       _M_handle_repeat(_StateIdT __state_id, _Head_type& __head);
@@ -218,25 +217,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       void
       _M_nonreentrant_repeat(_StateIdT, _StateIdT, _Head_type& __head);
 
-      struct _State_info
-      {
-	explicit
-	_State_info(size_t) { }
+      bool
+      _M_is_ecma() const
+      { return this->_M_nfa._M_options() & regex_constants::ECMAScript; }
 
-	// Dummy implementations for DFS mode.
-	bool _M_visited(_StateIdT) const { return false; }
-	void _M_queue(_StateIdT, const _ResultsVec&) { }
-
-	_BiIter* _M_get_sol_pos() { return &_M_sol_pos; }
-
-	_BiIter   _M_sol_pos;
-      };
+      static bool
+      _M_leftmost_longest(const vector<sub_match<_BiIter>>& __current_match,
+			  const sub_match<_BiIter>* __rhs);
 
     public:
       _Head_type		_M_head;
       sub_match<_BiIter>*	_M_results;
       pair<_StateIdT, _BiIter>	_M_last_rep_visit;
-      _State_info		_M_states;
 
       template<typename _Bp, typename _Ep>
 	friend class _Executor_mixin;

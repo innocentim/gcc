@@ -219,10 +219,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  // Try both and compare the result.
 	  // See "case _S_opcode_accept:" handling above.
 	  this->_M_dfs(__state._M_alt, __head);
-	  auto __has_sol = __head._M_has_sol;
-	  __head._M_has_sol = false;
 	  this->_M_dfs(__state._M_next, __head);
-	  __head._M_has_sol |= __has_sol;
 	}
     }
 
@@ -248,7 +245,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _M_search_from_first(_StateIdT __start)
     {
       _M_head._M_has_sol = false;
-      *_M_states._M_get_sol_pos() = _BiIter();
       this->_M_dfs(__start, _M_head);
       return _M_head._M_has_sol;
     }
@@ -284,11 +280,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{
 	  _M_nonreentrant_repeat(__state_id, __state._M_alt, __head);
 	  // If it's DFS executor and already accepted, we're done.
-	  if (!__head._M_has_sol)
+	  if (!__head._M_has_sol || !_M_is_ecma())
 	    this->_M_dfs(__state._M_next, __head);
 	}
       else // Non-greedy mode
 	{
+	  __glibcxx_assert(_M_is_ecma());
 	  // vice-versa.
 	  this->_M_dfs(__state._M_next, __head);
 	  if (!__head._M_has_sol)
@@ -354,35 +351,49 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     void _Dfs_executor<_BiIter, _TraitsT>::
     _M_handle_accept(const _State_type& __state, _Head_type& __head)
     {
-      __glibcxx_assert(!__head._M_has_sol);
-      if (this->_M_search_mode == _Search_mode::_Match)
-	__head._M_has_sol = this->_M_current == this->_M_end;
-      else
-	__head._M_has_sol = true;
-      if (this->_M_current == this->_M_begin
-	  && (this->_M_match_flags & regex_constants::match_not_null))
-	__head._M_has_sol = false;
+      if (!__head._M_has_sol)
+	{
+	  if (this->_M_search_mode == _Search_mode::_Match)
+	    __head._M_has_sol = this->_M_current == this->_M_end;
+	  else
+	    __head._M_has_sol = true;
+	  if (this->_M_current == this->_M_begin
+	      && (this->_M_match_flags & regex_constants::match_not_null))
+	    __head._M_has_sol = false;
+	}
       if (__head._M_has_sol)
 	{
-	  if (this->_M_nfa._M_options() & regex_constants::ECMAScript)
-	    std::copy(__head._M_captures.begin(),
-		      __head._M_captures.end(), _M_results);
-	  else // POSIX
+	  if (_M_is_ecma()
+	      || _M_leftmost_longest(__head._M_captures, _M_results))
 	    {
-	      __glibcxx_assert(_M_states._M_get_sol_pos());
-	      // TODO: This isn't entirely correct. Implement leftmost
-	      // longest for POSIX.
-	      if (*_M_states._M_get_sol_pos() == _BiIter()
-		  || std::distance(this->_M_begin,
-				   *_M_states._M_get_sol_pos())
-		     < std::distance(this->_M_begin, this->_M_current))
-		{
-		  *_M_states._M_get_sol_pos() = this->_M_current;
-		  std::copy(__head._M_captures.begin(),
-			    __head._M_captures.end(), _M_results);
-		}
+	      std::copy(__head._M_captures.begin(),
+			__head._M_captures.end(), _M_results);
 	    }
 	}
+    }
+
+  template<typename _BiIter, typename _TraitsT>
+    bool _Dfs_executor<_BiIter, _TraitsT>::
+    _M_leftmost_longest(const vector<sub_match<_BiIter>>& __current_match,
+			const sub_match<_BiIter>* __rhs)
+    {
+      for (const auto& __lhs : __current_match)
+	{
+	  if (!__lhs.matched)
+	    return false;
+	  if (!__rhs->matched)
+	    return true;
+	  if (__lhs.first < __rhs->first)
+	    return true;
+	  if (__lhs.first > __rhs->first)
+	    return false;
+	  if (__lhs.second > __rhs->second)
+	    return true;
+	  if (__lhs.second < __rhs->second)
+	    return false;
+	  __rhs++;
+	}
+      return false;
     }
 
   // ------------------------------------------------------------

@@ -26,8 +26,11 @@
 using namespace std;
 using namespace __gnu_test;
 
-int main()
+void
+test01()
 {
+  bool test __attribute__((unused)) = true;
+
   regex_constants::syntax_option_type grammar[] = {
     regex_constants::ECMAScript, regex_constants::extended,
     regex_constants::awk, regex_constants::egrep
@@ -51,4 +54,38 @@ int main()
     VERIFY(sol[i] == m[0]);
     i++;
   }
+}
+
+void
+test02()
+{
+  bool test __attribute__((unused)) = true;
+
+  regex_constants::syntax_option_type grammar[] = {
+    regex_constants::ECMAScript, regex_constants::extended,
+    regex_constants::awk, regex_constants::egrep
+  };
+
+  string sol[] = {
+      "",
+      "aaaa",
+      "aaaa",
+      "aaaa",
+  };
+  int i = 0;
+  for (auto g : grammar)
+  {
+    cmatch m;
+    VERIFY(regex_match("aaaa", m, regex("a*(a*)", g)));
+    VERIFY(sol[i] == m[1]);
+    VERIFY(regex_search("aaaa", m, regex("a*(a*)", g)));
+    VERIFY(sol[i] == m[1]);
+    i++;
+  }
+}
+
+int main()
+{
+  test01();
+  test02();
 }
