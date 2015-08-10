@@ -67,14 +67,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  || (__policy == _RegexExecutorPolicy::_S_alternate
 	      && !__re._M_automaton->_M_has_backref))
 	{
-	  __regex::_Executor<_BiIter, _Alloc, _TraitsT, false> __executor(
-	      __s, __e, *__re._M_automaton, __flags, __mode, __res);
+	  __regex::_Executor<_BiIter, _TraitsT, false> __executor(
+	      __s, __e, *__re._M_automaton, __flags, __mode, __res.data());
 	  __ret = __executor.template _M_match<__mode>();
 	}
       else
 	{
-	  __regex::_Executor<_BiIter, _Alloc, _TraitsT, true> __executor(
-	      __s, __e, *__re._M_automaton, __flags, __mode, __res);
+	  __regex::_Executor<_BiIter, _TraitsT, true> __executor(
+	      __s, __e, *__re._M_automaton, __flags, __mode, __res.data());
 	  __ret = __executor.template _M_match<__mode>();
 	}
       if (__ret)

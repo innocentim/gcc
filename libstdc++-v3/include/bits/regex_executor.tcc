@@ -99,10 +99,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
     }
 
-  template<typename _BiIter, typename _Alloc, typename _TraitsT,
+  template<typename _BiIter, typename _TraitsT,
 	   bool __dfs_mode>
   template<_Search_mode __search_mode>
-    bool _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
+    bool _Executor<_BiIter, _TraitsT, __dfs_mode>::
     _M_match_impl(_StateIdT __start)
     {
       if (__search_mode == _Search_mode::_Match)
@@ -150,14 +150,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   // Time complexity: \Omega(match_length), O(2^(_M_nfa.size()))
   // Space complexity: \theta(match_results.size() + match_length)
   //
-  template<typename _BiIter, typename _Alloc, typename _TraitsT,
+  template<typename _BiIter, typename _TraitsT,
 	   bool __dfs_mode>
-    bool _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
+    bool _Executor<_BiIter, _TraitsT, __dfs_mode>::
     _M_main_dispatch(_StateIdT __start, __dfs)
     {
       _M_has_sol = false;
       *_M_states._M_get_sol_pos() = _BiIter();
-      _M_cur_results = _M_results;
       this->_M_dfs(__start);
       return _M_has_sol;
     }
@@ -184,12 +183,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   //                  O(match_length * _M_nfa.size() * match_results.size())
   // Space complexity: \Omega(_M_nfa.size() + match_results.size())
   //                   O(_M_nfa.size() * match_results.size())
-  template<typename _BiIter, typename _Alloc, typename _TraitsT,
-	   bool __dfs_mode>
-    bool _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
+  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
+    bool _Executor<_BiIter, _TraitsT, __dfs_mode>::
     _M_main_dispatch(_StateIdT __start, __bfs)
     {
-      _M_states._M_queue(__start, _M_results);
+      _M_states._M_queue(__start, _M_cur_results);
       bool __ret = false;
       while (1)
 	{
@@ -222,9 +220,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   // considered for further repetitions.
   //
   // POSIX doesn't specify this, so let's keep them consistent.
-  template<typename _BiIter, typename _Alloc, typename _TraitsT,
-    bool __dfs_mode>
-    void _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
+  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
+    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
     _M_nonreentrant_repeat(_StateIdT __i, _StateIdT __alt)
     {
       auto __back = _M_last_rep_visit;
@@ -233,9 +230,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_last_rep_visit = std::move(__back);
     };
 
-  template<typename _BiIter, typename _Alloc, typename _TraitsT,
-	   bool __dfs_mode>
-    void _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
+  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
+    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
     _M_handle_repeat(_StateIdT __state_id)
     {
       // The most recent repeated state visit is the same, and this->_M_current
@@ -279,9 +275,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
     }
 
-  template<typename _BiIter, typename _Alloc, typename _TraitsT,
-	   bool __dfs_mode>
-    void _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
+  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
+    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
     _M_handle_subexpr_begin(const _State_type& __state)
     {
       auto& __res = _M_cur_results[__state._M_subexpr];
@@ -291,9 +286,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       __res.first = __back;
     }
 
-  template<typename _BiIter, typename _Alloc, typename _TraitsT,
-	   bool __dfs_mode>
-    void _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
+  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
+    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
     _M_handle_subexpr_end(const _State_type& __state)
     {
       auto& __res = _M_cur_results[__state._M_subexpr];
@@ -304,36 +298,32 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       __res = __back;
     }
 
-  template<typename _BiIter, typename _Alloc, typename _TraitsT,
-	   bool __dfs_mode>
-    void _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
+  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
+    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
     _M_handle_line_begin_assertion(const _State_type& __state)
     {
       if (this->_M_at_begin())
 	this->_M_dfs(__state._M_next);
     }
 
-  template<typename _BiIter, typename _Alloc, typename _TraitsT,
-	   bool __dfs_mode>
-    void _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
+  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
+    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
     _M_handle_line_end_assertion(const _State_type& __state)
     {
       if (this->_M_at_end())
 	this->_M_dfs(__state._M_next);
     }
 
-  template<typename _BiIter, typename _Alloc, typename _TraitsT,
-	   bool __dfs_mode>
-    void _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
+  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
+    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
     _M_handle_word_boundary(const _State_type& __state)
     {
       if (this->_M_word_boundary() == !__state._M_neg)
 	this->_M_dfs(__state._M_next);
     }
 
-  template<typename _BiIter, typename _Alloc, typename _TraitsT,
-	   bool __dfs_mode>
-    void _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
+  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
+    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
     _M_handle_subexpr_lookahead(const _State_type& __state)
     {
       // Return whether now match the given sub-NFA.
@@ -343,7 +333,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	_Executor __sub(
 	  this->_M_current, this->_M_end, this->_M_nfa,
 	  this->_M_match_flags | regex_constants::match_continuous,
-	  _Search_mode::_Search, __what);
+	  _Search_mode::_Search, __what.data());
 	if (__sub._M_match_impl<_Search_mode::_Search>(__next))
 	  {
 	    for (size_t __i = 0; __i < __what.size(); __i++)
@@ -360,9 +350,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	this->_M_dfs(__state._M_next);
     }
 
-  template<typename _BiIter, typename _Alloc, typename _TraitsT,
-	   bool __dfs_mode>
-    void _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
+  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
+    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
     _M_handle_match(const _State_type& __state)
     {
       if (this->_M_current == this->_M_end)
@@ -381,9 +370,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _M_states._M_queue(__state._M_next, _M_cur_results);
     }
 
-  template<typename _BiIter, typename _Alloc, typename _TraitsT,
-	   bool __dfs_mode>
-    void _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
+  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
+    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
     _M_handle_backref(const _State_type& __state)
     {
       __glibcxx_assert(__dfs_mode);
@@ -423,9 +411,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
     }
 
-  template<typename _BiIter, typename _Alloc, typename _TraitsT,
-	   bool __dfs_mode>
-    void _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
+  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
+    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
     _M_handle_accept(const _State_type& __state)
     {
       if (__dfs_mode)
@@ -441,7 +428,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  if (_M_has_sol)
 	    {
 	      if (this->_M_nfa._M_options() & regex_constants::ECMAScript)
-		_M_results = _M_cur_results;
+		std::copy(_M_cur_results.begin(),
+			  _M_cur_results.end(), _M_results);
 	      else // POSIX
 		{
 		  __glibcxx_assert(_M_states._M_get_sol_pos());
@@ -453,7 +441,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 			 < std::distance(this->_M_begin, this->_M_current))
 		    {
 		      *_M_states._M_get_sol_pos() = this->_M_current;
-		      _M_results = _M_cur_results;
+		      std::copy(_M_cur_results.begin(),
+				_M_cur_results.end(), _M_results);
 		    }
 		}
 	    }
@@ -468,14 +457,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    if (!_M_has_sol)
 	      {
 		_M_has_sol = true;
-		_M_results = _M_cur_results;
+		std::copy(_M_cur_results.begin(),
+			  _M_cur_results.end(), _M_results);
 	      }
 	}
     }
 
-  template<typename _BiIter, typename _Alloc, typename _TraitsT,
-	   bool __dfs_mode>
-    void _Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>::
+  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
+    void _Executor<_BiIter, _TraitsT, __dfs_mode>::
     _M_handle_alternative(const _State_type& __state)
     {
       if (this->_M_nfa._M_options() & regex_constants::ECMAScript)

@@ -116,11 +116,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    * The %_Executor class has two modes: DFS mode and BFS mode, controlled
    * by the template parameter %__dfs_mode.
    */
-  template<typename _BiIter, typename _Alloc, typename _TraitsT,
-	   bool __dfs_mode>
+  template<typename _BiIter, typename _TraitsT, bool __dfs_mode>
     class _Executor
     : private _Context<_BiIter, _TraitsT>,
-      private _Executor_mixin<_Executor<_BiIter, _Alloc, _TraitsT, __dfs_mode>>
+      private _Executor_mixin<_Executor<_BiIter, _TraitsT, __dfs_mode>>
     {
       using __algorithm = integral_constant<bool, __dfs_mode>;
       using __dfs = true_type;
@@ -129,13 +128,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using _State_type = _State<typename iterator_traits<_BiIter>::value_type>;
 
     public:
-      typedef std::vector<sub_match<_BiIter>, _Alloc>       _ResultsVec;
+      typedef std::vector<sub_match<_BiIter>>       _ResultsVec;
 
     public:
       _Executor(_BiIter __begin, _BiIter __end, const _NFA<_TraitsT>& __nfa,
 		regex_constants::match_flag_type __flags,
-		_Search_mode __search_mode, _ResultsVec& __results)
+		_Search_mode __search_mode, sub_match<_BiIter>* __results)
       : _Context_type(__begin, __end, __nfa, __flags, __search_mode),
+      _M_cur_results(this->_M_nfa._M_sub_count()),
       _M_results(__results), _M_last_rep_visit(_S_invalid_state_id, _BiIter()),
       _M_states(this->_M_nfa.size())
       { }
@@ -250,7 +250,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
     public:
       _ResultsVec                                           _M_cur_results;
-      _ResultsVec&                                          _M_results;
+      sub_match<_BiIter>*                                   _M_results;
       pair<_StateIdT, _BiIter>                              _M_last_rep_visit;
       _State_info<__algorithm, _ResultsVec>		    _M_states;
       // Do we have a solution so far?
