@@ -87,6 +87,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       }
 
       bool
+      _M_is_ecma() const
+      { return _M_nfa._M_options() & regex_constants::ECMAScript; }
+
+      bool
       _M_word_boundary() const;
 
       _Bi_iter                          _M_current;
@@ -101,10 +105,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     struct _Match_head
     {
       _Match_head(size_t __sub_count)
-      : _M_captures(__sub_count), _M_has_sol(false) { }
+      : _M_captures(__sub_count) { }
 
       vector<sub_match<_Bi_iter>>  _M_captures;
-      bool                         _M_has_sol;
     };
 
   template<typename _Bi_iter, typename _Executor>
@@ -119,31 +122,31 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	bool
 	_M_match_impl(_StateIdT __start);
 
-      void
+      bool
       _M_dfs(_StateIdT __state_id, _Head_type& __head);
 
-      void
+      bool
       _M_handle_subexpr_begin(const _State_type& __state, _Head_type& __head);
 
-      void
+      bool
       _M_handle_subexpr_end(const _State_type& __state, _Head_type& __head);
 
-      void
+      bool
       _M_handle_line_begin_assertion(const _State_type& __state,
 				     _Head_type& __head);
 
-      void
+      bool
       _M_handle_line_end_assertion(const _State_type& __state,
 				   _Head_type& __head);
 
-      void
+      bool
       _M_handle_word_boundary(const _State_type& __state, _Head_type& __head);
 
-      void
+      bool
       _M_handle_subexpr_lookahead(const _State_type& __state,
 				  _Head_type& __head);
 
-      void
+      bool
       _M_handle_alternative(const _State_type& __state,
 			    _Head_type& __head);
 
@@ -202,28 +205,20 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_handle_visit(_StateIdT __state_id)
       { return false; }
 
-      void
+      bool
       _M_handle_repeat(_StateIdT __state_id, _Head_type& __head);
 
-      void
+      bool
       _M_handle_match(const _State_type& __state, _Head_type& __head);
 
-      void
+      bool
       _M_handle_backref(const _State_type& __state, _Head_type& __head);
 
-      void
+      bool
       _M_handle_accept(const _State_type& __state, _Head_type& __head);
 
-      void
-      _M_nonreentrant_repeat(_StateIdT, _StateIdT, _Head_type& __head);
-
       bool
-      _M_is_ecma() const
-      { return this->_M_nfa._M_options() & regex_constants::ECMAScript; }
-
-      static bool
-      _M_leftmost_longest(const vector<sub_match<_BiIter>>& __current_match,
-			  const sub_match<_BiIter>* __rhs);
+      _M_nonreentrant_repeat(_StateIdT, _StateIdT, _Head_type& __head);
 
     public:
       _Head_type		_M_head;
@@ -284,17 +279,17 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_handle_visit(_StateIdT __state_id)
       { return _M_states._M_visited(__state_id); }
 
-      void
+      bool
       _M_handle_repeat(_StateIdT __state_id, _Head_type& __head);
 
-      void
+      bool
       _M_handle_match(const _State_type& __state, _Head_type& __head);
 
-      void
+      bool
       _M_handle_backref(const _State_type& __state, _Head_type& __head)
       { __glibcxx_assert(false); }
 
-      void
+      bool
       _M_handle_accept(const _State_type& __state, _Head_type& __head);
 
       struct _State_info
@@ -304,6 +299,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 	bool _M_visited(_StateIdT __i)
 	{
+	  // TODO: This is wrong for POSIX. If we already visited the state,
+	  // we may want to again do _M_dfs in this state, since POSIX uses
+	  // a leftmost longest algorithm for picking the final result.
 	  if (_M_visited_states[__i])
 	    return true;
 	  _M_visited_states[__i] = true;

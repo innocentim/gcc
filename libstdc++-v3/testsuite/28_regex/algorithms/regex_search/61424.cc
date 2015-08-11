@@ -48,9 +48,7 @@ test01()
     regex re("tour|tournament|tourn", g);
     const char str[] = "tournament";
     cmatch m;
-    VERIFY(regex_search(str, m, re));
-    // TODO: Fix ECMAScript BFS matcher.
-    //VERIFY(regex_search_debug(str, m, re));
+    VERIFY(regex_search_debug(str, m, re));
     VERIFY(sol[i] == m[0]);
     i++;
   }
@@ -75,6 +73,7 @@ test02()
   int i = 0;
   for (auto g : grammar)
   {
+    // TODO: Update to regex_*_debug after fixing POSIX BFS matcher.
     cmatch m;
     VERIFY(regex_match("aaaa", m, regex("a*(a*)", g)));
     VERIFY(sol[i] == m[1]);
