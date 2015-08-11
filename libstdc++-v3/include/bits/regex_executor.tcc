@@ -67,12 +67,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _M_match_impl(_StateIdT __start)
     {
       if (__search_mode == _Search_mode::_Match)
-	{
-	  _M_this()->_M_current = _M_this()->_M_begin;
-	  return _M_this()->_M_search_from_first(__start);
-	}
+	return _M_this()->_M_search_from_first(__start);
 
-      _M_this()->_M_current = _M_this()->_M_begin;
       if (_M_this()->_M_search_from_first(__start))
 	return true;
       if (_M_this()->_M_match_flags & regex_constants::match_continuous)
@@ -81,7 +77,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       while (_M_this()->_M_begin != _M_this()->_M_end)
 	{
 	  ++_M_this()->_M_begin;
-	  _M_this()->_M_current = _M_this()->_M_begin;
 	  if (_M_this()->_M_search_from_first(__start))
 	    return true;
 	}
@@ -262,7 +257,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _BiIter, typename _TraitsT>
     bool _Dfs_executor<_BiIter, _TraitsT>::
     _M_search_from_first(_StateIdT __start)
-    { return this->_M_dfs(__start, _M_head); }
+    {
+      this->_M_current = this->_M_begin;
+      return this->_M_dfs(__start, _M_head);
+    }
 
   // ECMAScript 262 [21.2.2.5.1] Note 4:
   // ...once the minimum number of repetitions has been satisfied, any more
@@ -422,6 +420,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     bool _Bfs_executor<_BiIter, _TraitsT>::
     _M_search_from_first(_StateIdT __start)
     {
+      this->_M_current = this->_M_begin;
       _M_states._M_queue(__start, _M_head._M_captures);
       bool __ret = false;
       while (1)
