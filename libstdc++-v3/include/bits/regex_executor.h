@@ -90,6 +90,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_is_ecma() const
       { return _M_nfa._M_options() & regex_constants::ECMAScript; }
 
+      size_t
+      _M_sub_count() const
+      { return _M_nfa._M_sub_count(); }
+
       bool
       _M_word_boundary() const;
 
@@ -101,21 +105,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _Search_mode                      _M_search_mode;
     };
 
-  template<typename _Bi_iter>
-    struct _Match_head
-    {
-      _Match_head(size_t __sub_count)
-      : _M_captures(__sub_count) { }
-
-      vector<sub_match<_Bi_iter>>  _M_captures;
-    };
-
   template<typename _Bi_iter, typename _Executor>
     class _Executor_mixin
     {
-      using _Head_type = _Match_head<_Bi_iter>;
       using _State_type =
 	  _State<typename iterator_traits<_Bi_iter>::value_type>;
+      using _Results_ptr = sub_match<_Bi_iter>*;
 
     protected:
       template<_Search_mode __search_mode>
@@ -123,32 +118,35 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	_M_match_impl(_StateIdT __start);
 
       bool
-      _M_dfs(_StateIdT __state_id, _Head_type& __head);
+      _M_dfs(_StateIdT __state_id, _Results_ptr __captures);
 
       bool
-      _M_handle_subexpr_begin(const _State_type& __state, _Head_type& __head);
+      _M_handle_subexpr_begin(const _State_type& __state,
+			      _Results_ptr __captures);
 
       bool
-      _M_handle_subexpr_end(const _State_type& __state, _Head_type& __head);
+      _M_handle_subexpr_end(const _State_type& __state,
+			    _Results_ptr __captures);
 
       bool
       _M_handle_line_begin_assertion(const _State_type& __state,
-				     _Head_type& __head);
+				     _Results_ptr __captures);
 
       bool
       _M_handle_line_end_assertion(const _State_type& __state,
-				   _Head_type& __head);
+				   _Results_ptr __captures);
 
       bool
-      _M_handle_word_boundary(const _State_type& __state, _Head_type& __head);
+      _M_handle_word_boundary(const _State_type& __state,
+			      _Results_ptr __captures);
 
       bool
       _M_handle_subexpr_lookahead(const _State_type& __state,
-				  _Head_type& __head);
+				  _Results_ptr __captures);
 
       bool
       _M_handle_alternative(const _State_type& __state,
-			    _Head_type& __head);
+			    _Results_ptr __captures);
 
     private:
       _Executor*
@@ -168,17 +166,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using _Context_type = _Context<_BiIter, _TraitsT>;
       using _State_type =
 	  _State<typename iterator_traits<_BiIter>::value_type>;
-      using _Head_type = _Match_head<_BiIter>;
-
-    public:
-      typedef std::vector<sub_match<_BiIter>>       _ResultsVec;
+      using _Results_ptr = sub_match<_BiIter>*;
 
     public:
       _Dfs_executor(_BiIter __begin, _BiIter __end, const _NFA<_TraitsT>& __nfa,
 		    regex_constants::match_flag_type __flags,
-		    _Search_mode __search_mode, sub_match<_BiIter>* __results)
+		    _Search_mode __search_mode, _Results_ptr __results)
       : _Context_type(__begin, __end, __nfa, __flags, __search_mode),
-      _M_head(this->_M_nfa._M_sub_count()),
+      _M_head(this->_M_sub_count()),
       _M_results(__results), _M_last_rep_visit(_S_invalid_state_id, _BiIter())
       { }
 
@@ -206,24 +201,24 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { return false; }
 
       bool
-      _M_handle_repeat(_StateIdT __state_id, _Head_type& __head);
+      _M_handle_repeat(_StateIdT __state_id, _Results_ptr __captures);
 
       bool
-      _M_handle_match(const _State_type& __state, _Head_type& __head);
+      _M_handle_match(const _State_type& __state, _Results_ptr __captures);
 
       bool
-      _M_handle_backref(const _State_type& __state, _Head_type& __head);
+      _M_handle_backref(const _State_type& __state, _Results_ptr __captures);
 
       bool
-      _M_handle_accept(const _State_type& __state, _Head_type& __head);
+      _M_handle_accept(const _State_type& __state, _Results_ptr __captures);
 
       bool
-      _M_nonreentrant_repeat(_StateIdT, _StateIdT, _Head_type& __head);
+      _M_nonreentrant_repeat(_StateIdT, _StateIdT, _Results_ptr __captures);
 
     public:
-      _Head_type		_M_head;
-      sub_match<_BiIter>*	_M_results;
-      pair<_StateIdT, _BiIter>	_M_last_rep_visit;
+      vector<sub_match<_BiIter>>	_M_head;
+      _Results_ptr			_M_results;
+      pair<_StateIdT, _BiIter>		_M_last_rep_visit;
 
       template<typename _Bp, typename _Ep>
 	friend class _Executor_mixin;
@@ -241,18 +236,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using _Context_type = _Context<_Bi_iter, _TraitsT>;
       using _State_type =
 	_State<typename iterator_traits<_Bi_iter>::value_type>;
-      using _Head_type = _Match_head<_Bi_iter>;
-
-    public:
-      typedef std::vector<sub_match<_Bi_iter>>       _ResultsVec;
+      using _Results_ptr = sub_match<_Bi_iter>*;
 
     public:
       _Bfs_executor(_Bi_iter __begin, _Bi_iter __end,
 		    const _NFA<_TraitsT>& __nfa,
 		    regex_constants::match_flag_type __flags,
-		    _Search_mode __search_mode, sub_match<_Bi_iter>* __results)
+		    _Search_mode __search_mode, _Results_ptr __results)
       : _Context_type(__begin, __end, __nfa, __flags, __search_mode),
-      _M_head(this->_M_nfa._M_sub_count()),
+      _M_head(this->_M_sub_count()),
       _M_results(__results), _M_states(this->_M_nfa.size())
       { }
 
@@ -280,17 +272,17 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { return _M_states._M_visited(__state_id); }
 
       bool
-      _M_handle_repeat(_StateIdT __state_id, _Head_type& __head);
+      _M_handle_repeat(_StateIdT __state_id, _Results_ptr __captures);
 
       bool
-      _M_handle_match(const _State_type& __state, _Head_type& __head);
+      _M_handle_match(const _State_type& __state, _Results_ptr __captures);
 
       bool
-      _M_handle_backref(const _State_type& __state, _Head_type& __head)
+      _M_handle_backref(const _State_type& __state, _Results_ptr __captures)
       { __glibcxx_assert(false); }
 
       bool
-      _M_handle_accept(const _State_type& __state, _Head_type& __head);
+      _M_handle_accept(const _State_type& __state, _Results_ptr __captures);
 
       struct _State_info
       {
@@ -308,22 +300,23 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  return false;
 	}
 
-	void _M_queue(_StateIdT __i, const _ResultsVec& __res)
-	{ _M_match_queue.emplace_back(__i, __res); }
-
-	// Dummy implementations for BFS mode.
-	_Bi_iter* _M_get_sol_pos() { return nullptr; }
+	void _M_queue(_StateIdT __i, const _Results_ptr __captures,
+		      size_t __size)
+	{
+	  _M_match_queue.emplace_back(
+	    __i, vector<sub_match<_Bi_iter>>{__captures, __captures + __size});
+	}
 
 	// Saves states that need to be considered for the next character.
-	vector<pair<_StateIdT, _ResultsVec>>	_M_match_queue;
+	vector<pair<_StateIdT, vector<sub_match<_Bi_iter>>>>	_M_match_queue;
 	// Indicates which states are already visited.
 	unique_ptr<bool[]>			_M_visited_states;
       };
 
     public:
-      _Head_type		_M_head;
-      sub_match<_Bi_iter>*      _M_results;
-      _State_info		_M_states;
+      vector<sub_match<_Bi_iter>>	_M_head;
+      _Results_ptr      		_M_results;
+      _State_info			_M_states;
 
       template<typename _Bp, typename _Ep>
 	friend class _Executor_mixin;

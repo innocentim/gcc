@@ -85,7 +85,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _Bi_iter, typename _Executor_type>
     bool _Executor_mixin<_Bi_iter, _Executor_type>::
-    _M_dfs(_StateIdT __state_id, _Head_type& __head)
+    _M_dfs(_StateIdT __state_id, _Results_ptr __captures)
     {
       if (_M_this()->_M_handle_visit(__state_id))
 	return false;
@@ -94,27 +94,28 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       switch (__state._M_opcode())
 	{
 	  case _S_opcode_repeat:
-	    return _M_this()->_M_handle_repeat(__state_id, __head);
+	    return _M_this()->_M_handle_repeat(__state_id, __captures);
 	  case _S_opcode_subexpr_begin:
-	    return _M_this()->_M_handle_subexpr_begin(__state, __head);
+	    return _M_this()->_M_handle_subexpr_begin(__state, __captures);
 	  case _S_opcode_subexpr_end:
-	    return _M_this()->_M_handle_subexpr_end(__state, __head);
+	    return _M_this()->_M_handle_subexpr_end(__state, __captures);
 	  case _S_opcode_line_begin_assertion:
-	    return _M_this()->_M_handle_line_begin_assertion(__state, __head);
+	    return _M_this()->_M_handle_line_begin_assertion(__state,
+							     __captures);
 	  case _S_opcode_line_end_assertion:
-	    return _M_this()->_M_handle_line_end_assertion(__state, __head);
+	    return _M_this()->_M_handle_line_end_assertion(__state, __captures);
 	  case _S_opcode_word_boundary:
-	    return _M_this()->_M_handle_word_boundary(__state, __head);
+	    return _M_this()->_M_handle_word_boundary(__state, __captures);
 	  case _S_opcode_subexpr_lookahead:
-	    return _M_this()->_M_handle_subexpr_lookahead(__state, __head);
+	    return _M_this()->_M_handle_subexpr_lookahead(__state, __captures);
 	  case _S_opcode_match:
-	    return _M_this()->_M_handle_match(__state, __head);
+	    return _M_this()->_M_handle_match(__state, __captures);
 	  case _S_opcode_backref:
-	    return _M_this()->_M_handle_backref(__state, __head);
+	    return _M_this()->_M_handle_backref(__state, __captures);
 	  case _S_opcode_accept:
-	    return _M_this()->_M_handle_accept(__state, __head);
+	    return _M_this()->_M_handle_accept(__state, __captures);
 	  case _S_opcode_alternative:
-	    return _M_this()->_M_handle_alternative(__state, __head);
+	    return _M_this()->_M_handle_alternative(__state, __captures);
 	  case _S_opcode_unknown:
 	  case _S_opcode_dummy:
 	    __glibcxx_assert(false);
@@ -123,25 +124,25 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _Bi_iter, typename _Executor_type>
     bool _Executor_mixin<_Bi_iter, _Executor_type>::
-    _M_handle_subexpr_begin(const _State_type& __state, _Head_type& __head)
+    _M_handle_subexpr_begin(const _State_type& __state, _Results_ptr __captures)
     {
-      auto& __res = __head._M_captures[__state._M_subexpr];
+      auto& __res = __captures[__state._M_subexpr];
       auto __back = __res.first;
       __res.first = _M_this()->_M_current;
-      auto __ret = this->_M_dfs(__state._M_next, __head);
+      auto __ret = this->_M_dfs(__state._M_next, __captures);
       __res.first = __back;
       return __ret;
     }
 
   template<typename _Bi_iter, typename _Executor_type>
     bool _Executor_mixin<_Bi_iter, _Executor_type>::
-    _M_handle_subexpr_end(const _State_type& __state, _Head_type& __head)
+    _M_handle_subexpr_end(const _State_type& __state, _Results_ptr __captures)
     {
-      auto& __res = __head._M_captures[__state._M_subexpr];
+      auto& __res = __captures[__state._M_subexpr];
       auto __back = __res;
       __res.second = _M_this()->_M_current;
       __res.matched = true;
-      auto __ret = this->_M_dfs(__state._M_next, __head);
+      auto __ret = this->_M_dfs(__state._M_next, __captures);
       __res = __back;
       return __ret;
     }
@@ -149,32 +150,38 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Bi_iter, typename _Executor_type>
     bool _Executor_mixin<_Bi_iter, _Executor_type>::
     _M_handle_line_begin_assertion(const _State_type& __state,
-				   _Head_type& __head)
+				   _Results_ptr __captures)
     {
-      return _M_this()->_M_at_begin() && this->_M_dfs(__state._M_next, __head);
+      return _M_this()->_M_at_begin() && this->_M_dfs(__state._M_next,
+						      __captures);
     }
 
   template<typename _Bi_iter, typename _Executor_type>
     bool _Executor_mixin<_Bi_iter, _Executor_type>::
-    _M_handle_line_end_assertion(const _State_type& __state, _Head_type& __head)
-    { return _M_this()->_M_at_end() && this->_M_dfs(__state._M_next, __head); }
+    _M_handle_line_end_assertion(const _State_type& __state,
+				 _Results_ptr __captures)
+    {
+      return _M_this()->_M_at_end() && this->_M_dfs(__state._M_next,
+						    __captures);
+    }
 
   template<typename _Bi_iter, typename _Executor_type>
     bool _Executor_mixin<_Bi_iter, _Executor_type>::
-    _M_handle_word_boundary(const _State_type& __state, _Head_type& __head)
+    _M_handle_word_boundary(const _State_type& __state, _Results_ptr __captures)
     {
       return _M_this()->_M_word_boundary() == !__state._M_neg
-	&& this->_M_dfs(__state._M_next, __head);
+	&& this->_M_dfs(__state._M_next, __captures);
     }
 
   template<typename _Bi_iter, typename _Executor_type>
     bool _Executor_mixin<_Bi_iter, _Executor_type>::
-    _M_handle_subexpr_lookahead(const _State_type& __state, _Head_type& __head)
+    _M_handle_subexpr_lookahead(const _State_type& __state,
+				_Results_ptr __captures)
     {
       // Return whether now match the given sub-NFA.
-      const auto __lookahead = [this](_StateIdT __next, _Head_type& __head)
+      const auto __lookahead = [this](_StateIdT __next, _Results_ptr __captures)
       {
-	vector<sub_match<_Bi_iter>> __what(__head._M_captures.size());
+	vector<sub_match<_Bi_iter>> __what(_M_this()->_M_sub_count());
 	_Executor_type __sub(
 	  _M_this()->_M_current, _M_this()->_M_end, _M_this()->_M_nfa,
 	  _M_this()->_M_match_flags | regex_constants::match_continuous,
@@ -183,7 +190,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  {
 	    for (size_t __i = 0; __i < __what.size(); __i++)
 	      if (__what[__i].matched)
-		__head._M_captures[__i] = __what[__i];
+		__captures[__i] = __what[__i];
 	    return true;
 	  }
 	return false;
@@ -191,48 +198,47 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       // Here __state._M_alt offers a single start node for a sub-NFA.
       // We recursively invoke our algorithm to match the sub-NFA.
-      return __lookahead(__state._M_alt, __head) == !__state._M_neg
-	&& this->_M_dfs(__state._M_next, __head);
+      return __lookahead(__state._M_alt, __captures) == !__state._M_neg
+	&& this->_M_dfs(__state._M_next, __captures);
     }
 
   template<typename _Bi_iter, typename _Executor_type>
     bool _Executor_mixin<_Bi_iter, _Executor_type>::
-    _M_handle_alternative(const _State_type& __state, _Head_type& __head)
+    _M_handle_alternative(const _State_type& __state, _Results_ptr __captures)
     {
       if (_M_this()->_M_nfa._M_options() & regex_constants::ECMAScript)
 	{
-	  return this->_M_dfs(__state._M_alt, __head)
-	    || this->_M_dfs(__state._M_next, __head);
+	  return this->_M_dfs(__state._M_alt, __captures)
+	    || this->_M_dfs(__state._M_next, __captures);
 	}
       else
 	{
 	  // Try both and compare the result.
-	  auto __ret1 = this->_M_dfs(__state._M_alt, __head);
-	  auto __ret2 = this->_M_dfs(__state._M_next, __head);
+	  auto __ret1 = this->_M_dfs(__state._M_alt, __captures);
+	  auto __ret2 = this->_M_dfs(__state._M_next, __captures);
 	  return __ret1 || __ret2;
 	}
     }
 
   template<typename _Bi_iter>
     bool
-    __leftmost_longest(const vector<sub_match<_Bi_iter>>& __current_match,
-		       const sub_match<_Bi_iter>* __rhs)
+    __leftmost_longest(const sub_match<_Bi_iter>* __lhs,
+		       const sub_match<_Bi_iter>* __rhs, size_t __size)
     {
-      for (const auto& __lhs : __current_match)
+      for (size_t __i = 0; __i < __size; __i++, __lhs++, __rhs++)
 	{
-	  if (!__lhs.matched)
+	  if (!__lhs->matched)
 	    return false;
 	  if (!__rhs->matched)
 	    return true;
-	  if (__lhs.first < __rhs->first)
+	  if (__lhs->first < __rhs->first)
 	    return true;
-	  if (__lhs.first > __rhs->first)
+	  if (__lhs->first > __rhs->first)
 	    return false;
-	  if (__lhs.second > __rhs->second)
+	  if (__lhs->second > __rhs->second)
 	    return true;
-	  if (__lhs.second < __rhs->second)
+	  if (__lhs->second < __rhs->second)
 	    return false;
-	  __rhs++;
 	}
       return false;
     }
@@ -259,7 +265,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _M_search_from_first(_StateIdT __start)
     {
       this->_M_current = this->_M_begin;
-      return this->_M_dfs(__start, _M_head);
+      return this->_M_dfs(__start, _M_head.data());
     }
 
   // ECMAScript 262 [21.2.2.5.1] Note 4:
@@ -270,18 +276,19 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   // POSIX doesn't specify this, so let's keep them consistent.
   template<typename _BiIter, typename _TraitsT>
     bool _Dfs_executor<_BiIter, _TraitsT>::
-    _M_nonreentrant_repeat(_StateIdT __i, _StateIdT __alt, _Head_type& __head)
+    _M_nonreentrant_repeat(_StateIdT __i, _StateIdT __alt,
+			   _Results_ptr __captures)
     {
       auto __back = _M_last_rep_visit;
       _M_last_rep_visit = make_pair(__i, this->_M_current);
-      auto __ret = this->_M_dfs(__alt, __head);
+      auto __ret = this->_M_dfs(__alt, __captures);
       _M_last_rep_visit = std::move(__back);
       return __ret;
     };
 
   template<typename _BiIter, typename _TraitsT>
     bool _Dfs_executor<_BiIter, _TraitsT>::
-    _M_handle_repeat(_StateIdT __state_id, _Head_type& __head)
+    _M_handle_repeat(_StateIdT __state_id, _Results_ptr __captures)
     {
       // The most recent repeated state visit is the same, and this->_M_current
       // doesn't change since then. Shouldn't continue dead looping.
@@ -294,35 +301,36 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{
 	  if (this->_M_is_ecma())
 	    {
-	      return _M_nonreentrant_repeat(__state_id, __state._M_alt, __head)
-		|| this->_M_dfs(__state._M_next, __head);
+	      return _M_nonreentrant_repeat(__state_id, __state._M_alt,
+					    __captures)
+		|| this->_M_dfs(__state._M_next, __captures);
 	    }
 	  else
 	    {
 	      auto __ret1 = _M_nonreentrant_repeat(__state_id, __state._M_alt,
-						   __head);
-	      auto __ret2 = this->_M_dfs(__state._M_next, __head);
+						   __captures);
+	      auto __ret2 = this->_M_dfs(__state._M_next, __captures);
 	      return __ret1 || __ret2;
 	    }
 	}
       else // Non-greedy mode
 	{
 	  __glibcxx_assert(this->_M_is_ecma());
-	  return this->_M_dfs(__state._M_next, __head)
-	    || _M_nonreentrant_repeat(__state_id, __state._M_alt, __head);
+	  return this->_M_dfs(__state._M_next, __captures)
+	    || _M_nonreentrant_repeat(__state_id, __state._M_alt, __captures);
 	}
     }
 
   template<typename _BiIter, typename _TraitsT>
     bool _Dfs_executor<_BiIter, _TraitsT>::
-    _M_handle_match(const _State_type& __state, _Head_type& __head)
+    _M_handle_match(const _State_type& __state, _Results_ptr __captures)
     {
       if (this->_M_current == this->_M_end)
 	return false;
       if (__state._M_matches(*this->_M_current))
 	{
 	  ++this->_M_current;
-	  auto __ret = this->_M_dfs(__state._M_next, __head);
+	  auto __ret = this->_M_dfs(__state._M_next, __captures);
 	  --this->_M_current;
 	  return __ret;
 	}
@@ -331,9 +339,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _BiIter, typename _TraitsT>
     bool _Dfs_executor<_BiIter, _TraitsT>::
-    _M_handle_backref(const _State_type& __state, _Head_type& __head)
+    _M_handle_backref(const _State_type& __state, _Results_ptr __captures)
     {
-      auto& __submatch = __head._M_captures[__state._M_backref_index];
+      auto& __submatch = __captures[__state._M_backref_index];
       if (__submatch.matched)
 	{
 	  auto __last = this->_M_current;
@@ -356,7 +364,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    }
 	  auto __back = this->_M_current;
 	  this->_M_current = __last;
-	  auto __ret = this->_M_dfs(__state._M_next, __head);
+	  auto __ret = this->_M_dfs(__state._M_next, __captures);
 	  this->_M_current = std::move(__back);
 	  return __ret;
 	}
@@ -366,13 +374,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  // If the regular expression has n or more capturing parentheses
 	  // but the nth one is undefined because it has not captured
 	  // anything, then the backreference always succeeds.
-	  return this->_M_dfs(__state._M_next, __head);
+	  return this->_M_dfs(__state._M_next, __captures);
 	}
     }
 
   template<typename _BiIter, typename _TraitsT>
     bool _Dfs_executor<_BiIter, _TraitsT>::
-    _M_handle_accept(const _State_type& __state, _Head_type& __head)
+    _M_handle_accept(const _State_type& __state, _Results_ptr __captures)
     {
       bool __has_sol = false;
       if (this->_M_search_mode == _Search_mode::_Match)
@@ -385,10 +393,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       if (__has_sol)
 	{
 	  if (this->_M_is_ecma()
-	      || __leftmost_longest(__head._M_captures, _M_results))
+	      || __leftmost_longest(__captures, _M_results,
+				    this->_M_sub_count()))
 	    {
-	      std::copy(__head._M_captures.begin(),
-			__head._M_captures.end(), _M_results);
+	      std::copy(__captures, __captures + this->_M_sub_count(),
+			_M_results);
 	    }
 	}
       return __has_sol;
@@ -421,7 +430,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _M_search_from_first(_StateIdT __start)
     {
       this->_M_current = this->_M_begin;
-      _M_states._M_queue(__start, _M_head._M_captures);
+      _M_states._M_queue(__start, _M_head.data(), this->_M_sub_count());
       bool __ret = false;
       while (1)
 	{
@@ -433,8 +442,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  auto __old_queue = std::move(_M_states._M_match_queue);
 	  for (auto& __task : __old_queue)
 	    {
-	      _M_head._M_captures = std::move(__task.second);
-	      __has_sol |= this->_M_dfs(__task.first, _M_head);
+	      _M_head = std::move(__task.second);
+	      __has_sol |= this->_M_dfs(__task.first, _M_head.data());
 	      if (__has_sol && this->_M_is_ecma())
 		break;
 	    }
@@ -450,7 +459,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _BiIter, typename _TraitsT>
     bool _Bfs_executor<_BiIter, _TraitsT>::
-    _M_handle_repeat(_StateIdT __state_id, _Head_type& __head)
+    _M_handle_repeat(_StateIdT __state_id, _Results_ptr __captures)
     {
       const auto& __state = this->_M_nfa[__state_id];
       // Greedy.
@@ -458,37 +467,38 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{
 	  if (this->_M_is_ecma())
 	    {
-	      return this->_M_dfs(__state._M_alt, __head)
-		|| this->_M_dfs(__state._M_next, __head);
+	      return this->_M_dfs(__state._M_alt, __captures)
+		|| this->_M_dfs(__state._M_next, __captures);
 	    }
 	  else
 	    {
-	      auto __ret1 = this->_M_dfs(__state._M_alt, __head);
-	      auto __ret2 = this->_M_dfs(__state._M_next, __head);
+	      auto __ret1 = this->_M_dfs(__state._M_alt, __captures);
+	      auto __ret2 = this->_M_dfs(__state._M_next, __captures);
 	      return __ret1 || __ret2;
 	    }
 	}
       else // Non-greedy mode
 	{
 	  __glibcxx_assert(this->_M_is_ecma());
-	  return this->_M_dfs(__state._M_next, __head)
-	    || this->_M_dfs(__state._M_alt, __head);
+	  return this->_M_dfs(__state._M_next, __captures)
+	    || this->_M_dfs(__state._M_alt, __captures);
 	}
     }
 
   template<typename _BiIter, typename _TraitsT>
     bool _Bfs_executor<_BiIter, _TraitsT>::
-    _M_handle_match(const _State_type& __state, _Head_type& __head)
+    _M_handle_match(const _State_type& __state, _Results_ptr __captures)
     {
       if (this->_M_current != this->_M_end)
 	if (__state._M_matches(*this->_M_current))
-	  _M_states._M_queue(__state._M_next, __head._M_captures);
+	  _M_states._M_queue(__state._M_next, __captures,
+			     this->_M_sub_count());
       return false;
     }
 
   template<typename _BiIter, typename _TraitsT>
     bool _Bfs_executor<_BiIter, _TraitsT>::
-    _M_handle_accept(const _State_type& __state, _Head_type& __head)
+    _M_handle_accept(const _State_type& __state, _Results_ptr __captures)
     {
       bool __has_sol = false;
       if (this->_M_search_mode == _Search_mode::_Match)
@@ -501,10 +511,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       if (__has_sol)
 	{
 	  if (this->_M_is_ecma()
-	      || __leftmost_longest(__head._M_captures, _M_results))
+	      || __leftmost_longest(__captures, _M_results,
+				    this->_M_sub_count()))
 	    {
-	      std::copy(__head._M_captures.begin(),
-			__head._M_captures.end(), _M_results);
+	      std::copy(__captures, __captures + this->_M_sub_count(),
+			_M_results);
 	    }
 	}
       return __has_sol;
