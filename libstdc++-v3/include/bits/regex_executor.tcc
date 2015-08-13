@@ -85,7 +85,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _Bi_iter, typename _Executor_type>
     bool _Executor_mixin<_Bi_iter, _Executor_type>::
-    _M_dfs(_StateIdT __state_id, _Results_ptr __captures)
+    _M_dfs(_StateIdT __state_id, _Submatch* __captures)
     {
       if (_M_this()->_M_handle_visit(__state_id))
 	return false;
@@ -127,7 +127,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Bi_iter, typename _Executor_type>
     bool _Executor_mixin<_Bi_iter, _Executor_type>::
     _M_handle_line_begin_assertion(const _State_type& __state,
-				   _Results_ptr __captures)
+				   _Submatch* __captures)
     {
       return _M_this()->_M_at_begin() && this->_M_dfs(__state._M_next,
 						      __captures);
@@ -136,7 +136,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Bi_iter, typename _Executor_type>
     bool _Executor_mixin<_Bi_iter, _Executor_type>::
     _M_handle_line_end_assertion(const _State_type& __state,
-				 _Results_ptr __captures)
+				 _Submatch* __captures)
     {
       return _M_this()->_M_at_end() && this->_M_dfs(__state._M_next,
 						    __captures);
@@ -144,7 +144,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _Bi_iter, typename _Executor_type>
     bool _Executor_mixin<_Bi_iter, _Executor_type>::
-    _M_handle_word_boundary(const _State_type& __state, _Results_ptr __captures)
+    _M_handle_word_boundary(const _State_type& __state, _Submatch* __captures)
     {
       return _M_this()->_M_word_boundary() == !__state._M_neg
 	&& this->_M_dfs(__state._M_next, __captures);
@@ -153,12 +153,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Bi_iter, typename _Executor_type>
     bool _Executor_mixin<_Bi_iter, _Executor_type>::
     _M_handle_subexpr_lookahead(const _State_type& __state,
-				_Results_ptr __captures)
+				_Submatch* __captures)
     {
       // Return whether now match the given sub-NFA.
-      const auto __lookahead = [this](_StateIdT __next, _Results_ptr __captures)
+      const auto __lookahead = [this](_StateIdT __next, _Submatch* __captures)
       {
-	vector<sub_match<_Bi_iter>> __what(_M_this()->_M_sub_count());
+	vector<_Submatch> __what(_M_this()->_M_sub_count());
 	_Executor_type __sub(
 	  _M_this()->_M_current, _M_this()->_M_end, _M_this()->_M_nfa,
 	  _M_this()->_M_match_flags | regex_constants::match_continuous,
@@ -181,7 +181,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _Bi_iter, typename _Executor_type>
     bool _Executor_mixin<_Bi_iter, _Executor_type>::
-    _M_handle_alternative(const _State_type& __state, _Results_ptr __captures)
+    _M_handle_alternative(const _State_type& __state, _Submatch* __captures)
     {
       if (_M_this()->_M_nfa._M_options() & regex_constants::ECMAScript)
 	{
@@ -254,7 +254,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _BiIter, typename _TraitsT, _Style __style>
     bool _Dfs_executor<_BiIter, _TraitsT, __style>::
     _M_nonreentrant_repeat(_StateIdT __i, _StateIdT __alt,
-			   _Results_ptr __captures)
+			   _Submatch* __captures)
     {
       auto __back = _M_last_rep_visit;
       _M_last_rep_visit = make_pair(__i, this->_M_current);
@@ -265,7 +265,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _BiIter, typename _TraitsT, _Style __style>
     bool _Dfs_executor<_BiIter, _TraitsT, __style>::
-    _M_handle_subexpr_begin(const _State_type& __state, _Results_ptr __captures)
+    _M_handle_subexpr_begin(const _State_type& __state, _Submatch* __captures)
     {
       auto& __res = __captures[__state._M_subexpr];
       auto __back = __res.first;
@@ -279,7 +279,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _BiIter, typename _TraitsT, _Style __style>
     bool _Dfs_executor<_BiIter, _TraitsT, __style>::
-    _M_handle_subexpr_end(const _State_type& __state, _Results_ptr __captures)
+    _M_handle_subexpr_end(const _State_type& __state, _Submatch* __captures)
     {
       auto& __res = __captures[__state._M_subexpr];
       auto __back = __res;
@@ -294,7 +294,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _BiIter, typename _TraitsT, _Style __style>
     bool _Dfs_executor<_BiIter, _TraitsT, __style>::
-    _M_handle_repeat(_StateIdT __state_id, _Results_ptr __captures)
+    _M_handle_repeat(_StateIdT __state_id, _Submatch* __captures)
     {
       // The most recent repeated state visit is the same, and this->_M_current
       // doesn't change since then. Shouldn't continue dead looping.
@@ -329,7 +329,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _BiIter, typename _TraitsT, _Style __style>
     bool _Dfs_executor<_BiIter, _TraitsT, __style>::
-    _M_handle_match(const _State_type& __state, _Results_ptr __captures)
+    _M_handle_match(const _State_type& __state, _Submatch* __captures)
     {
       if (this->_M_current == this->_M_end)
 	return false;
@@ -345,7 +345,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _BiIter, typename _TraitsT, _Style __style>
     bool _Dfs_executor<_BiIter, _TraitsT, __style>::
-    _M_handle_backref(const _State_type& __state, _Results_ptr __captures)
+    _M_handle_backref(const _State_type& __state, _Submatch* __captures)
     {
       auto& __submatch = __captures[__state._M_backref_index];
       if (__submatch.matched)
@@ -386,7 +386,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _BiIter, typename _TraitsT, _Style __style>
     bool _Dfs_executor<_BiIter, _TraitsT, __style>::
-    _M_handle_accept(const _State_type& __state, _Results_ptr __captures)
+    _M_handle_accept(const _State_type& __state, _Submatch* __captures)
     {
       bool __has_sol = false;
       if (this->_M_search_mode == _Search_mode::_Match)
@@ -429,9 +429,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       this->_M_current = this->_M_begin;
       bool __ret = false;
-      vector<pair<_StateIdT, vector<sub_match<_BiIter>>>> __old_queue;
-      __old_queue.emplace_back(
-	  __start, vector<sub_match<_BiIter>>(this->_M_sub_count()));
+      vector<pair<_StateIdT, vector<_Submatch>>> __old_queue;
+      __old_queue.emplace_back(__start,
+			       vector<_Submatch>(this->_M_sub_count()));
       while (!__old_queue.empty())
 	{
 	  bool __has_sol = false;
@@ -456,7 +456,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _BiIter, typename _TraitsT>
     bool _Bfs_executor<_BiIter, _TraitsT>::
-    _M_handle_subexpr_begin(const _State_type& __state, _Results_ptr __captures)
+    _M_handle_subexpr_begin(const _State_type& __state, _Submatch* __captures)
     {
       auto& __res = __captures[__state._M_subexpr];
       auto __back = __res.first;
@@ -468,7 +468,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _BiIter, typename _TraitsT>
     bool _Bfs_executor<_BiIter, _TraitsT>::
-    _M_handle_subexpr_end(const _State_type& __state, _Results_ptr __captures)
+    _M_handle_subexpr_end(const _State_type& __state, _Submatch* __captures)
     {
       auto& __res = __captures[__state._M_subexpr];
       auto __back = __res;
@@ -481,7 +481,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _BiIter, typename _TraitsT>
     bool _Bfs_executor<_BiIter, _TraitsT>::
-    _M_handle_repeat(_StateIdT __state_id, _Results_ptr __captures)
+    _M_handle_repeat(_StateIdT __state_id, _Submatch* __captures)
     {
       const auto& __state = this->_M_nfa[__state_id];
       // Greedy.
@@ -509,7 +509,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _BiIter, typename _TraitsT>
     bool _Bfs_executor<_BiIter, _TraitsT>::
-    _M_handle_match(const _State_type& __state, _Results_ptr __captures)
+    _M_handle_match(const _State_type& __state, _Submatch* __captures)
     {
       if (this->_M_current != this->_M_end)
 	if (__state._M_matches(*this->_M_current))
@@ -519,7 +519,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _BiIter, typename _TraitsT>
     bool _Bfs_executor<_BiIter, _TraitsT>::
-    _M_handle_accept(const _State_type& __state, _Results_ptr __captures)
+    _M_handle_accept(const _State_type& __state, _Submatch* __captures)
     {
       bool __has_sol = false;
       if (this->_M_search_mode == _Search_mode::_Match)

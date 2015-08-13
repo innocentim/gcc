@@ -107,7 +107,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       using _State_type =
 	  _State<typename iterator_traits<_Bi_iter>::value_type>;
-      using _Results_ptr = sub_match<_Bi_iter>*;
+      using _Submatch = sub_match<_Bi_iter>;
 
     protected:
       template<_Search_mode __search_mode>
@@ -115,27 +115,26 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	_M_match_impl(_StateIdT __start);
 
       bool
-      _M_dfs(_StateIdT __state_id, _Results_ptr __captures);
+      _M_dfs(_StateIdT __state_id, _Submatch* __captures);
 
       bool
       _M_handle_line_begin_assertion(const _State_type& __state,
-				     _Results_ptr __captures);
+				     _Submatch* __captures);
 
       bool
       _M_handle_line_end_assertion(const _State_type& __state,
-				   _Results_ptr __captures);
+				   _Submatch* __captures);
 
       bool
       _M_handle_word_boundary(const _State_type& __state,
-			      _Results_ptr __captures);
+			      _Submatch* __captures);
 
       bool
       _M_handle_subexpr_lookahead(const _State_type& __state,
-				  _Results_ptr __captures);
+				  _Submatch* __captures);
 
       bool
-      _M_handle_alternative(const _State_type& __state,
-			    _Results_ptr __captures);
+      _M_handle_alternative(const _State_type& __state, _Submatch* __captures);
 
     private:
       _Executor*
@@ -154,13 +153,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Bi_iter>
     class _Dfs_mixin<_Bi_iter, _Style::_Ecma>
     {
-      using _Results_ptr = sub_match<_Bi_iter>*;
+      using _Submatch = sub_match<_Bi_iter>;
 
     public:
-      _Dfs_mixin(_Results_ptr __results, size_t __sub_count)
+      _Dfs_mixin(_Submatch* __results, size_t __sub_count)
       : _M_results(__results) { }
 
-      _Results_ptr
+      _Submatch*
       _M_current_results()
       { return _M_results; }
 
@@ -168,19 +167,19 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_update() { }
 
     private:
-      _Results_ptr _M_results;
+      _Submatch* _M_results;
     };
 
   template<typename _Bi_iter>
     class _Dfs_mixin<_Bi_iter, _Style::_Posix>
     {
-      using _Results_ptr = sub_match<_Bi_iter>*;
+      using _Submatch = sub_match<_Bi_iter>;
 
     public:
-      _Dfs_mixin(_Results_ptr __results, size_t __sub_count)
+      _Dfs_mixin(_Submatch* __results, size_t __sub_count)
       : _M_results(__results), _M_current_res(__sub_count) { }
 
-      _Results_ptr
+      _Submatch*
       _M_current_results()
       { return _M_current_res.data(); }
 
@@ -193,8 +192,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       }
 
     private:
-      _Results_ptr			_M_results;
-      vector<sub_match<_Bi_iter>>	_M_current_res;
+      _Submatch*		_M_results;
+      vector<_Submatch>	_M_current_res;
     };
 
   /**
@@ -211,12 +210,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using _Context_type = _Context<_BiIter, _TraitsT>;
       using _State_type =
 	  _State<typename iterator_traits<_BiIter>::value_type>;
-      using _Results_ptr = sub_match<_BiIter>*;
+      using _Submatch = sub_match<_BiIter>;
 
     public:
       _Dfs_executor(_BiIter __begin, _BiIter __end, const _NFA<_TraitsT>& __nfa,
 		    regex_constants::match_flag_type __flags,
-		    _Search_mode __search_mode, _Results_ptr __results)
+		    _Search_mode __search_mode, _Submatch* __results)
       : _Context_type(__begin, __end, __nfa, __flags, __search_mode),
       _Dfs_mixin<_BiIter, __style>(__results, this->_M_sub_count()),
       _M_last_rep_visit(_S_invalid_state_id, _BiIter())
@@ -251,26 +250,26 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       bool
       _M_handle_subexpr_begin(const _State_type& __state,
-			      _Results_ptr __captures);
+			      _Submatch* __captures);
 
       bool
       _M_handle_subexpr_end(const _State_type& __state,
-			    _Results_ptr __captures);
+			    _Submatch* __captures);
 
       bool
-      _M_handle_repeat(_StateIdT __state_id, _Results_ptr __captures);
+      _M_handle_repeat(_StateIdT __state_id, _Submatch* __captures);
 
       bool
-      _M_handle_match(const _State_type& __state, _Results_ptr __captures);
+      _M_handle_match(const _State_type& __state, _Submatch* __captures);
 
       bool
-      _M_handle_backref(const _State_type& __state, _Results_ptr __captures);
+      _M_handle_backref(const _State_type& __state, _Submatch* __captures);
 
       bool
-      _M_handle_accept(const _State_type& __state, _Results_ptr __captures);
+      _M_handle_accept(const _State_type& __state, _Submatch* __captures);
 
       bool
-      _M_nonreentrant_repeat(_StateIdT, _StateIdT, _Results_ptr __captures);
+      _M_nonreentrant_repeat(_StateIdT, _StateIdT, _Submatch* __captures);
 
     public:
       pair<_StateIdT, _BiIter>		_M_last_rep_visit;
@@ -291,13 +290,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using _Context_type = _Context<_Bi_iter, _TraitsT>;
       using _State_type =
 	_State<typename iterator_traits<_Bi_iter>::value_type>;
-      using _Results_ptr = sub_match<_Bi_iter>*;
+      using _Submatch = sub_match<_Bi_iter>;
 
     public:
       _Bfs_executor(_Bi_iter __begin, _Bi_iter __end,
 		    const _NFA<_TraitsT>& __nfa,
 		    regex_constants::match_flag_type __flags,
-		    _Search_mode __search_mode, _Results_ptr __results)
+		    _Search_mode __search_mode, _Submatch* __results)
       : _Context_type(__begin, __end, __nfa, __flags, __search_mode),
       _M_results(__results), _M_visited_states(new bool[this->_M_nfa.size()])
       { }
@@ -339,38 +338,38 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       bool
       _M_handle_subexpr_begin(const _State_type& __state,
-			      _Results_ptr __captures);
+			      _Submatch* __captures);
 
       bool
       _M_handle_subexpr_end(const _State_type& __state,
-			    _Results_ptr __captures);
+			    _Submatch* __captures);
 
       bool
-      _M_handle_repeat(_StateIdT __state_id, _Results_ptr __captures);
+      _M_handle_repeat(_StateIdT __state_id, _Submatch* __captures);
 
       bool
-      _M_handle_match(const _State_type& __state, _Results_ptr __captures);
+      _M_handle_match(const _State_type& __state, _Submatch* __captures);
 
       bool
-      _M_handle_backref(const _State_type& __state, _Results_ptr __captures)
+      _M_handle_backref(const _State_type& __state, _Submatch* __captures)
       {
 	__glibcxx_assert(false);
 	return false;
       }
 
       bool
-      _M_handle_accept(const _State_type& __state, _Results_ptr __captures);
+      _M_handle_accept(const _State_type& __state, _Submatch* __captures);
 
-      void _M_queue(_StateIdT __i, const _Results_ptr __captures, size_t __size)
+      void _M_queue(_StateIdT __i, const _Submatch* __captures, size_t __size)
       {
 	_M_match_queue.emplace_back(
-	  __i, vector<sub_match<_Bi_iter>>{__captures, __captures + __size});
+	  __i, vector<_Submatch>{__captures, __captures + __size});
       }
 
     public:
-      _Results_ptr      		_M_results;
+      _Submatch*      				_M_results;
       // Saves states that need to be considered for the next character.
-      vector<pair<_StateIdT, vector<sub_match<_Bi_iter>>>>	_M_match_queue;
+      vector<pair<_StateIdT, vector<_Submatch>>>	_M_match_queue;
       // Indicates which states are already visited.
       unique_ptr<bool[]>			_M_visited_states;
 
