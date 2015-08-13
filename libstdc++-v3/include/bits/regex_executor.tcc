@@ -411,9 +411,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   // It first computes epsilon closure (states that can be achieved without
   // consuming characters) for every state that's still matching,
   // using the same DFS algorithm, but doesn't re-enter states (using
-  // _M_states._M_visited to check), nor follow _S_opcode_match.
+  // _M_visited to check), nor follow _S_opcode_match.
   //
-  // Then apply DFS using every _S_opcode_match (in _M_states._M_match_queue)
+  // Then apply DFS using every _S_opcode_match (in _M_match_queue)
   // as the start state.
   //
   // It significantly reduces potential duplicate states, so has a better
@@ -428,30 +428,29 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _M_search_from_first(_StateIdT __start)
     {
       this->_M_current = this->_M_begin;
-      _M_states._M_queue(__start, _M_head.data(), this->_M_sub_count());
       bool __ret = false;
-      while (1)
+      vector<pair<_StateIdT, vector<sub_match<_BiIter>>>> __old_queue;
+      __old_queue.emplace_back(
+	  __start, vector<sub_match<_BiIter>>(this->_M_sub_count()));
+      while (!__old_queue.empty())
 	{
 	  bool __has_sol = false;
-	  if (_M_states._M_match_queue.empty())
-	    break;
-	  std::fill_n(_M_states._M_visited_states.get(),
-		      this->_M_nfa.size(), false);
-	  auto __old_queue = std::move(_M_states._M_match_queue);
+	  std::fill_n(_M_visited_states.get(), this->_M_nfa.size(), false);
 	  for (auto& __task : __old_queue)
-	    {
-	      _M_head = std::move(__task.second);
-	      __has_sol |= this->_M_dfs(__task.first, _M_head.data());
-	      if (__has_sol && this->_M_is_ecma())
-		break;
-	    }
+	    if (this->_M_dfs(__task.first, __task.second.data()))
+	      {
+		__has_sol = true;
+		if (this->_M_is_ecma())
+		  break;
+	      }
+	  std::swap(__old_queue, _M_match_queue);
+	  _M_match_queue.clear();
 	  if (__has_sol)
 	    __ret = true;
 	  if (this->_M_current == this->_M_end)
 	    break;
 	  ++this->_M_current;
 	}
-      _M_states._M_match_queue.clear();
       return __ret;
     }
 
@@ -514,8 +513,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       if (this->_M_current != this->_M_end)
 	if (__state._M_matches(*this->_M_current))
-	  _M_states._M_queue(__state._M_next, __captures,
-			     this->_M_sub_count());
+	  _M_queue(__state._M_next, __captures, this->_M_sub_count());
       return false;
     }
 

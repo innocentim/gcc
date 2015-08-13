@@ -299,8 +299,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		    regex_constants::match_flag_type __flags,
 		    _Search_mode __search_mode, _Results_ptr __results)
       : _Context_type(__begin, __end, __nfa, __flags, __search_mode),
-      _M_head(this->_M_sub_count()),
-      _M_results(__results), _M_states(this->_M_nfa.size())
+      _M_results(__results), _M_visited_states(new bool[this->_M_nfa.size()])
       { }
 
       // __search_mode should be the same as this->_M_search_mode. It's
@@ -328,7 +327,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       bool
       _M_handle_visit(_StateIdT __state_id)
-      { return _M_states._M_visited(__state_id); }
+      {
+	// TODO: This is wrong for POSIX. If we already visited the state,
+	// we may want to again do _M_dfs in this state, since POSIX uses
+	// a leftmost longest algorithm for picking the final result.
+	if (_M_visited_states[__state_id])
+	  return true;
+	_M_visited_states[__state_id] = true;
+	return false;
+      }
 
       bool
       _M_handle_subexpr_begin(const _State_type& __state,
@@ -354,39 +361,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       bool
       _M_handle_accept(const _State_type& __state, _Results_ptr __captures);
 
-      struct _State_info
+      void _M_queue(_StateIdT __i, const _Results_ptr __captures, size_t __size)
       {
-	explicit
-	_State_info(size_t __n) : _M_visited_states(new bool[__n]()) { }
-
-	bool _M_visited(_StateIdT __i)
-	{
-	  // TODO: This is wrong for POSIX. If we already visited the state,
-	  // we may want to again do _M_dfs in this state, since POSIX uses
-	  // a leftmost longest algorithm for picking the final result.
-	  if (_M_visited_states[__i])
-	    return true;
-	  _M_visited_states[__i] = true;
-	  return false;
-	}
-
-	void _M_queue(_StateIdT __i, const _Results_ptr __captures,
-		      size_t __size)
-	{
-	  _M_match_queue.emplace_back(
-	    __i, vector<sub_match<_Bi_iter>>{__captures, __captures + __size});
-	}
-
-	// Saves states that need to be considered for the next character.
-	vector<pair<_StateIdT, vector<sub_match<_Bi_iter>>>>	_M_match_queue;
-	// Indicates which states are already visited.
-	unique_ptr<bool[]>			_M_visited_states;
-      };
+	_M_match_queue.emplace_back(
+	  __i, vector<sub_match<_Bi_iter>>{__captures, __captures + __size});
+      }
 
     public:
-      vector<sub_match<_Bi_iter>>	_M_head;
       _Results_ptr      		_M_results;
-      _State_info			_M_states;
+      // Saves states that need to be considered for the next character.
+      vector<pair<_StateIdT, vector<sub_match<_Bi_iter>>>>	_M_match_queue;
+      // Indicates which states are already visited.
+      unique_ptr<bool[]>			_M_visited_states;
 
       template<typename _Bp, typename _Ep>
 	friend class _Executor_mixin;
