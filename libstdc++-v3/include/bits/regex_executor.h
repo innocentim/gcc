@@ -282,10 +282,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    * @brief Takes a regex and an input string and applies Thompson NFA
    * algorithm.
    */
-  template<typename _Bi_iter, typename _TraitsT>
+  template<typename _Bi_iter, typename _TraitsT, _Style __style>
     class _Bfs_executor
     : private _Context<_Bi_iter, _TraitsT>,
-      private _Executor_mixin<_Bi_iter, _Bfs_executor<_Bi_iter, _TraitsT>>
+      private _Executor_mixin<_Bi_iter, _Bfs_executor<_Bi_iter, _TraitsT,
+						      __style>>
     {
       using _Context_type = _Context<_Bi_iter, _TraitsT>;
       using _State_type =
@@ -320,9 +321,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       bool
       _M_search_from_first(_StateIdT __start);
 
-      bool
+      constexpr bool
       _M_is_ecma() const
-      { return this->_M_nfa._M_options() & regex_constants::ECMAScript; }
+      { return __style == _Style::_Ecma; }
 
       bool
       _M_handle_visit(_StateIdT __state_id)
