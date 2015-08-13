@@ -118,14 +118,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_dfs(_StateIdT __state_id, _Results_ptr __captures);
 
       bool
-      _M_handle_subexpr_begin(const _State_type& __state,
-			      _Results_ptr __captures);
-
-      bool
-      _M_handle_subexpr_end(const _State_type& __state,
-			    _Results_ptr __captures);
-
-      bool
       _M_handle_line_begin_assertion(const _State_type& __state,
 				     _Results_ptr __captures);
 
@@ -151,6 +143,60 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { return static_cast<_Executor*>(this); }
     };
 
+  template<typename _Bi_iter>
+    bool
+    __leftmost_longest(const sub_match<_Bi_iter>* __lhs,
+		       const sub_match<_Bi_iter>* __rhs, size_t __size);
+
+  template<typename _Bi_iter, _Style __style>
+    class _Dfs_mixin;
+
+  template<typename _Bi_iter>
+    class _Dfs_mixin<_Bi_iter, _Style::_Ecma>
+    {
+      using _Results_ptr = sub_match<_Bi_iter>*;
+
+    public:
+      _Dfs_mixin(_Results_ptr __results, size_t __sub_count)
+      : _M_results(__results) { }
+
+      _Results_ptr
+      _M_current_results()
+      { return _M_results; }
+
+      void
+      _M_update() { }
+
+    private:
+      _Results_ptr _M_results;
+    };
+
+  template<typename _Bi_iter>
+    class _Dfs_mixin<_Bi_iter, _Style::_Posix>
+    {
+      using _Results_ptr = sub_match<_Bi_iter>*;
+
+    public:
+      _Dfs_mixin(_Results_ptr __results, size_t __sub_count)
+      : _M_results(__results), _M_current_res(__sub_count) { }
+
+      _Results_ptr
+      _M_current_results()
+      { return _M_current_res.data(); }
+
+      void
+      _M_update()
+      {
+	if (__leftmost_longest(_M_current_res.data(), _M_results,
+			       _M_current_res.size()))
+	  std::copy(_M_current_res.begin(), _M_current_res.end(), _M_results);
+      }
+
+    private:
+      _Results_ptr			_M_results;
+      vector<sub_match<_Bi_iter>>	_M_current_res;
+    };
+
   /**
    * @brief Takes a regex and an input string and applies backtracking
    * algorithm.
@@ -159,7 +205,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     class _Dfs_executor
     : private _Context<_BiIter, _TraitsT>,
       private _Executor_mixin<_BiIter, _Dfs_executor<_BiIter, _TraitsT,
-						     __style>>
+						     __style>>,
+      private _Dfs_mixin<_BiIter, __style>
     {
       using _Context_type = _Context<_BiIter, _TraitsT>;
       using _State_type =
@@ -171,8 +218,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		    regex_constants::match_flag_type __flags,
 		    _Search_mode __search_mode, _Results_ptr __results)
       : _Context_type(__begin, __end, __nfa, __flags, __search_mode),
-      _M_head(this->_M_sub_count()),
-      _M_results(__results), _M_last_rep_visit(_S_invalid_state_id, _BiIter())
+      _Dfs_mixin<_BiIter, __style>(__results, this->_M_sub_count()),
+      _M_last_rep_visit(_S_invalid_state_id, _BiIter())
       { }
 
       // __search_mode should be the same as this->_M_search_mode. It's
@@ -203,6 +250,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { return false; }
 
       bool
+      _M_handle_subexpr_begin(const _State_type& __state,
+			      _Results_ptr __captures);
+
+      bool
+      _M_handle_subexpr_end(const _State_type& __state,
+			    _Results_ptr __captures);
+
+      bool
       _M_handle_repeat(_StateIdT __state_id, _Results_ptr __captures);
 
       bool
@@ -218,8 +273,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_nonreentrant_repeat(_StateIdT, _StateIdT, _Results_ptr __captures);
 
     public:
-      vector<sub_match<_BiIter>>	_M_head;
-      _Results_ptr			_M_results;
       pair<_StateIdT, _BiIter>		_M_last_rep_visit;
 
       template<typename _Bp, typename _Ep>
@@ -276,6 +329,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       bool
       _M_handle_visit(_StateIdT __state_id)
       { return _M_states._M_visited(__state_id); }
+
+      bool
+      _M_handle_subexpr_begin(const _State_type& __state,
+			      _Results_ptr __captures);
+
+      bool
+      _M_handle_subexpr_end(const _State_type& __state,
+			    _Results_ptr __captures);
 
       bool
       _M_handle_repeat(_StateIdT __state_id, _Results_ptr __captures);

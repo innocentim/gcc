@@ -126,31 +126,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _Bi_iter, typename _Executor_type>
     bool _Executor_mixin<_Bi_iter, _Executor_type>::
-    _M_handle_subexpr_begin(const _State_type& __state, _Results_ptr __captures)
-    {
-      auto& __res = __captures[__state._M_subexpr];
-      auto __back = __res.first;
-      __res.first = _M_this()->_M_current;
-      auto __ret = this->_M_dfs(__state._M_next, __captures);
-      __res.first = __back;
-      return __ret;
-    }
-
-  template<typename _Bi_iter, typename _Executor_type>
-    bool _Executor_mixin<_Bi_iter, _Executor_type>::
-    _M_handle_subexpr_end(const _State_type& __state, _Results_ptr __captures)
-    {
-      auto& __res = __captures[__state._M_subexpr];
-      auto __back = __res;
-      __res.second = _M_this()->_M_current;
-      __res.matched = true;
-      auto __ret = this->_M_dfs(__state._M_next, __captures);
-      __res = __back;
-      return __ret;
-    }
-
-  template<typename _Bi_iter, typename _Executor_type>
-    bool _Executor_mixin<_Bi_iter, _Executor_type>::
     _M_handle_line_begin_assertion(const _State_type& __state,
 				   _Results_ptr __captures)
     {
@@ -267,7 +242,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _M_search_from_first(_StateIdT __start)
     {
       this->_M_current = this->_M_begin;
-      return this->_M_dfs(__start, _M_head.data());
+      return this->_M_dfs(__start, this->_M_current_results());
     }
 
   // ECMAScript 262 [21.2.2.5.1] Note 4:
@@ -287,6 +262,35 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_last_rep_visit = std::move(__back);
       return __ret;
     };
+
+  template<typename _BiIter, typename _TraitsT, _Style __style>
+    bool _Dfs_executor<_BiIter, _TraitsT, __style>::
+    _M_handle_subexpr_begin(const _State_type& __state, _Results_ptr __captures)
+    {
+      auto& __res = __captures[__state._M_subexpr];
+      auto __back = __res.first;
+      __res.first = this->_M_current;
+      auto __ret = this->_M_dfs(__state._M_next, __captures);
+      if (_M_is_ecma() && __ret)
+	return true;
+      __res.first = __back;
+      return __ret;
+    }
+
+  template<typename _BiIter, typename _TraitsT, _Style __style>
+    bool _Dfs_executor<_BiIter, _TraitsT, __style>::
+    _M_handle_subexpr_end(const _State_type& __state, _Results_ptr __captures)
+    {
+      auto& __res = __captures[__state._M_subexpr];
+      auto __back = __res;
+      __res.second = this->_M_current;
+      __res.matched = true;
+      auto __ret = this->_M_dfs(__state._M_next, __captures);
+      if (_M_is_ecma() && __ret)
+	return true;
+      __res = __back;
+      return __ret;
+    }
 
   template<typename _BiIter, typename _TraitsT, _Style __style>
     bool _Dfs_executor<_BiIter, _TraitsT, __style>::
@@ -393,15 +397,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  && (this->_M_match_flags & regex_constants::match_not_null))
 	__has_sol = false;
       if (__has_sol)
-	{
-	  if (this->_M_is_ecma()
-	      || __leftmost_longest(__captures, _M_results,
-				    this->_M_sub_count()))
-	    {
-	      std::copy(__captures, __captures + this->_M_sub_count(),
-			_M_results);
-	    }
-	}
+	this->_M_update();
       return __has_sol;
     }
 
@@ -456,6 +452,31 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  ++this->_M_current;
 	}
       _M_states._M_match_queue.clear();
+      return __ret;
+    }
+
+  template<typename _BiIter, typename _TraitsT>
+    bool _Bfs_executor<_BiIter, _TraitsT>::
+    _M_handle_subexpr_begin(const _State_type& __state, _Results_ptr __captures)
+    {
+      auto& __res = __captures[__state._M_subexpr];
+      auto __back = __res.first;
+      __res.first = this->_M_current;
+      auto __ret = this->_M_dfs(__state._M_next, __captures);
+      __res.first = __back;
+      return __ret;
+    }
+
+  template<typename _BiIter, typename _TraitsT>
+    bool _Bfs_executor<_BiIter, _TraitsT>::
+    _M_handle_subexpr_end(const _State_type& __state, _Results_ptr __captures)
+    {
+      auto& __res = __captures[__state._M_subexpr];
+      auto __back = __res;
+      __res.second = this->_M_current;
+      __res.matched = true;
+      auto __ret = this->_M_dfs(__state._M_next, __captures);
+      __res = __back;
       return __ret;
     }
 
