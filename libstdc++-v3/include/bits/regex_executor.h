@@ -51,6 +51,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    */
 
   enum class _Search_mode : unsigned char { _Match, _Search };
+  enum class _Style : unsigned char { _Ecma, _Posix };
 
   template<typename _Bi_iter, typename _Traits>
     struct _Context
@@ -85,10 +86,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	return _M_current == _M_end
 	  && !(_M_match_flags & regex_constants::match_not_eol);
       }
-
-      bool
-      _M_is_ecma() const
-      { return _M_nfa._M_options() & regex_constants::ECMAScript; }
 
       size_t
       _M_sub_count() const
@@ -158,10 +155,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    * @brief Takes a regex and an input string and applies backtracking
    * algorithm.
    */
-  template<typename _BiIter, typename _TraitsT>
+  template<typename _BiIter, typename _TraitsT, _Style __style>
     class _Dfs_executor
     : private _Context<_BiIter, _TraitsT>,
-      private _Executor_mixin<_BiIter, _Dfs_executor<_BiIter, _TraitsT>>
+      private _Executor_mixin<_BiIter, _Dfs_executor<_BiIter, _TraitsT,
+						     __style>>
     {
       using _Context_type = _Context<_BiIter, _TraitsT>;
       using _State_type =
@@ -195,6 +193,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     private:
       bool
       _M_search_from_first(_StateIdT __start);
+
+      constexpr bool
+      _M_is_ecma() const
+      { return __style == _Style::_Ecma; }
 
       bool
       _M_handle_visit(_StateIdT __state_id)
@@ -268,6 +270,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_search_from_first(_StateIdT __start);
 
       bool
+      _M_is_ecma() const
+      { return this->_M_nfa._M_options() & regex_constants::ECMAScript; }
+
+      bool
       _M_handle_visit(_StateIdT __state_id)
       { return _M_states._M_visited(__state_id); }
 
@@ -279,7 +285,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       bool
       _M_handle_backref(const _State_type& __state, _Results_ptr __captures)
-      { __glibcxx_assert(false); }
+      {
+	__glibcxx_assert(false);
+	return false;
+      }
 
       bool
       _M_handle_accept(const _State_type& __state, _Results_ptr __captures);

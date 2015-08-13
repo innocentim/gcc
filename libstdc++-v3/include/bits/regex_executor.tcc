@@ -120,6 +120,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  case _S_opcode_dummy:
 	    __glibcxx_assert(false);
 	}
+      __glibcxx_assert(false);
+      return false;
     }
 
   template<typename _Bi_iter, typename _Executor_type>
@@ -260,8 +262,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   // Time complexity: \Omega(match_length), O(2^(_M_nfa.size()))
   // Space complexity: \theta(match_results.size() + match_length)
   //
-  template<typename _BiIter, typename _TraitsT>
-    bool _Dfs_executor<_BiIter, _TraitsT>::
+  template<typename _BiIter, typename _TraitsT, _Style __style>
+    bool _Dfs_executor<_BiIter, _TraitsT, __style>::
     _M_search_from_first(_StateIdT __start)
     {
       this->_M_current = this->_M_begin;
@@ -274,8 +276,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   // considered for further repetitions.
   //
   // POSIX doesn't specify this, so let's keep them consistent.
-  template<typename _BiIter, typename _TraitsT>
-    bool _Dfs_executor<_BiIter, _TraitsT>::
+  template<typename _BiIter, typename _TraitsT, _Style __style>
+    bool _Dfs_executor<_BiIter, _TraitsT, __style>::
     _M_nonreentrant_repeat(_StateIdT __i, _StateIdT __alt,
 			   _Results_ptr __captures)
     {
@@ -286,8 +288,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __ret;
     };
 
-  template<typename _BiIter, typename _TraitsT>
-    bool _Dfs_executor<_BiIter, _TraitsT>::
+  template<typename _BiIter, typename _TraitsT, _Style __style>
+    bool _Dfs_executor<_BiIter, _TraitsT, __style>::
     _M_handle_repeat(_StateIdT __state_id, _Results_ptr __captures)
     {
       // The most recent repeated state visit is the same, and this->_M_current
@@ -321,8 +323,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
     }
 
-  template<typename _BiIter, typename _TraitsT>
-    bool _Dfs_executor<_BiIter, _TraitsT>::
+  template<typename _BiIter, typename _TraitsT, _Style __style>
+    bool _Dfs_executor<_BiIter, _TraitsT, __style>::
     _M_handle_match(const _State_type& __state, _Results_ptr __captures)
     {
       if (this->_M_current == this->_M_end)
@@ -337,8 +339,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return false;
     }
 
-  template<typename _BiIter, typename _TraitsT>
-    bool _Dfs_executor<_BiIter, _TraitsT>::
+  template<typename _BiIter, typename _TraitsT, _Style __style>
+    bool _Dfs_executor<_BiIter, _TraitsT, __style>::
     _M_handle_backref(const _State_type& __state, _Results_ptr __captures)
     {
       auto& __submatch = __captures[__state._M_backref_index];
@@ -378,8 +380,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
     }
 
-  template<typename _BiIter, typename _TraitsT>
-    bool _Dfs_executor<_BiIter, _TraitsT>::
+  template<typename _BiIter, typename _TraitsT, _Style __style>
+    bool _Dfs_executor<_BiIter, _TraitsT, __style>::
     _M_handle_accept(const _State_type& __state, _Results_ptr __captures)
     {
       bool __has_sol = false;
