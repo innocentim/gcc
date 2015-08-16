@@ -274,17 +274,22 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     public:
       pair<_StateIdT, _BiIter>		_M_last_rep_visit;
 
-      template<typename _Bp, typename _Ep>
+      template<typename, typename>
 	friend class _Executor_mixin;
     };
 
-  template<typename _Bi_iter, typename _Traits, _Style __style>
+  template<typename _Bi_iter, typename _TraitsT, _Style __style>
+    class _Bfs_executor;
+
+  template<typename _Executor_type>
     class _Bfs_mixin;
 
   template<typename _Bi_iter, typename _Traits>
-    class _Bfs_mixin<_Bi_iter, _Traits, _Style::_Ecma>
+    class _Bfs_mixin<_Bfs_executor<_Bi_iter, _Traits, _Style::_Ecma>>
     {
       using _Submatch = sub_match<_Bi_iter>;
+      using _State_type =
+	_State<typename iterator_traits<_Bi_iter>::value_type>;
 
     public:
       _Bfs_mixin(size_t __size) : _M_visited_states(__size, false) { }
@@ -298,22 +303,38 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	return false;
       }
 
+      bool
+      _M_handle_match(const _State_type& __state, _Submatch* __captures)
+      {
+	if (_M_this()->_M_current != _M_this()->_M_end)
+	  if (__state._M_matches(*_M_this()->_M_current))
+	    _M_this()->_M_queue(__state._M_next, __captures,
+				_M_this()->_M_sub_count());
+	return false;
+      }
+
       void
       _M_clear()
       { std::fill(_M_visited_states.begin(), _M_visited_states.end(), false); }
 
     private:
+      _Bfs_executor<_Bi_iter, _Traits, _Style::_Ecma>*
+      _M_this()
+      {
+	return static_cast<
+	    _Bfs_executor<_Bi_iter, _Traits, _Style::_Ecma>*>(this);
+      }
+
       // Indicates which states are already visited.
       vector<char> _M_visited_states;
     };
 
-  template<typename _Bi_iter, typename _TraitsT, _Style __style>
-    class _Bfs_executor;
-
   template<typename _Bi_iter, typename _Traits>
-    class _Bfs_mixin<_Bi_iter, _Traits, _Style::_Posix>
+    class _Bfs_mixin<_Bfs_executor<_Bi_iter, _Traits, _Style::_Posix>>
     {
       using _Submatch = sub_match<_Bi_iter>;
+      using _State_type =
+	_State<typename iterator_traits<_Bi_iter>::value_type>;
 
     public:
       _Bfs_mixin(size_t __size) : _M_visited_states(__size, nullptr) { }
@@ -326,6 +347,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 				    _M_this()->_M_sub_count()))
 	  return true;
 	_M_visited_states[__state_id] = __results;
+	return false;
+      }
+
+      bool
+      _M_handle_match(const _State_type& __state, _Submatch* __captures)
+      {
+	if (_M_this()->_M_current != _M_this()->_M_end)
+	  if (__state._M_matches(*_M_this()->_M_current))
+	    _M_this()->_M_queue(__state._M_next, __captures,
+				_M_this()->_M_sub_count());
 	return false;
       }
 
@@ -366,7 +397,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     : private _Context<_Bi_iter, _TraitsT>,
       private _Executor_mixin<_Bi_iter, _Bfs_executor<_Bi_iter, _TraitsT,
 						      __style>>,
-      private _Bfs_mixin<_Bi_iter, _TraitsT, __style>
+      private _Bfs_mixin<_Bfs_executor<_Bi_iter, _TraitsT, __style>>
     {
       using _Context_type = _Context<_Bi_iter, _TraitsT>;
       using _State_type =
@@ -379,8 +410,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		    regex_constants::match_flag_type __flags,
 		    _Search_mode __search_mode, _Submatch* __results)
       : _Context_type(__begin, __end, __nfa, __flags, __search_mode),
-      _Bfs_mixin<_Bi_iter, _TraitsT, __style>(this->_M_nfa.size()),
-      _M_results(__results)
+      _Bfs_mixin<_Bfs_executor>(this->_M_nfa.size()), _M_results(__results)
       { }
 
       // __search_mode should be the same as this->_M_search_mode. It's
@@ -418,9 +448,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_handle_repeat(_StateIdT __state_id, _Submatch* __captures);
 
       bool
-      _M_handle_match(const _State_type& __state, _Submatch* __captures);
-
-      bool
       _M_handle_backref(const _State_type& __state, _Submatch* __captures)
       {
 	__glibcxx_assert(false);
@@ -441,9 +468,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       // Saves states that need to be considered for the next character.
       vector<pair<_StateIdT, vector<_Submatch>>>	_M_match_queue;
 
-      template<typename _Bp, typename _Ep>
+      template<typename, typename>
 	friend class _Executor_mixin;
-      template<typename, typename, _Style>
+      template<typename>
 	friend class _Bfs_mixin;
     };
 

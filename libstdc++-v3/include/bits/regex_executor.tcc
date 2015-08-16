@@ -402,7 +402,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 
   template<typename _Bi_iter, typename _Traits>
-    bool _Bfs_mixin<_Bi_iter, _Traits, _Style::_Posix>::
+    bool _Bfs_mixin<_Bfs_executor<_Bi_iter, _Traits, _Style::_Posix>>::
     _M_leftmost_longest(const _Submatch* __lhs, const _Submatch* __rhs,
 			size_t __size)
     {
@@ -536,16 +536,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  return this->_M_dfs(__state._M_next, __captures)
 	    || this->_M_dfs(__state._M_alt, __captures);
 	}
-    }
-
-  template<typename _BiIter, typename _TraitsT, _Style __style>
-    bool _Bfs_executor<_BiIter, _TraitsT, __style>::
-    _M_handle_match(const _State_type& __state, _Submatch* __captures)
-    {
-      if (this->_M_current != this->_M_end)
-	if (__state._M_matches(*this->_M_current))
-	  _M_queue(__state._M_next, __captures, this->_M_sub_count());
-      return false;
     }
 
   template<typename _BiIter, typename _TraitsT, _Style __style>
