@@ -37,8 +37,8 @@ namespace __regex
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   // Return whether now is at some word boundary.
-  template<typename _Bi_iter, typename _Traits>
-    inline bool _Context<_Bi_iter, _Traits>::
+  template<typename _Nfa_type, typename _Bi_iter>
+    inline bool _Context<_Nfa_type, _Bi_iter>::
     _M_word_boundary() const
     {
       bool __left_is_word = false;
@@ -61,9 +61,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return false;
     }
 
-  template<typename _Bi_iter, typename _Executor_type>
+  template<typename _Nfa_type, typename _Bi_iter, typename _Executor_type>
   template<_Search_mode __search_mode>
-    bool _Executor_mixin<_Bi_iter, _Executor_type>::
+    bool _Executor_mixin<_Nfa_type, _Bi_iter, _Executor_type>::
     _M_match_impl(_StateIdT __start)
     {
       if (__search_mode == _Search_mode::_Match)
@@ -83,8 +83,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return false;
     }
 
-  template<typename _Bi_iter, typename _Executor_type>
-    bool _Executor_mixin<_Bi_iter, _Executor_type>::
+  template<typename _Nfa_type, typename _Bi_iter, typename _Executor_type>
+    bool _Executor_mixin<_Nfa_type, _Bi_iter, _Executor_type>::
     _M_dfs(_StateIdT __state_id, _Submatch* __captures)
     {
       if (_M_this()->_M_handle_visit(__state_id, __captures))
@@ -126,8 +126,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return false;
     }
 
-  template<typename _Bi_iter, typename _Executor_type>
-    bool _Executor_mixin<_Bi_iter, _Executor_type>::
+  template<typename _Nfa_type, typename _Bi_iter, typename _Executor_type>
+    bool _Executor_mixin<_Nfa_type, _Bi_iter, _Executor_type>::
     _M_handle_line_begin_assertion(const _State_type& __state,
 				   _Submatch* __captures)
     {
@@ -135,8 +135,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 						      __captures);
     }
 
-  template<typename _Bi_iter, typename _Executor_type>
-    bool _Executor_mixin<_Bi_iter, _Executor_type>::
+  template<typename _Nfa_type, typename _Bi_iter, typename _Executor_type>
+    bool _Executor_mixin<_Nfa_type, _Bi_iter, _Executor_type>::
     _M_handle_line_end_assertion(const _State_type& __state,
 				 _Submatch* __captures)
     {
@@ -144,16 +144,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 						    __captures);
     }
 
-  template<typename _Bi_iter, typename _Executor_type>
-    bool _Executor_mixin<_Bi_iter, _Executor_type>::
+  template<typename _Nfa_type, typename _Bi_iter, typename _Executor_type>
+    bool _Executor_mixin<_Nfa_type, _Bi_iter, _Executor_type>::
     _M_handle_word_boundary(const _State_type& __state, _Submatch* __captures)
     {
       return _M_this()->_M_word_boundary() == !__state._M_neg
 	&& this->_M_dfs(__state._M_next, __captures);
     }
 
-  template<typename _Bi_iter, typename _Executor_type>
-    bool _Executor_mixin<_Bi_iter, _Executor_type>::
+  template<typename _Nfa_type, typename _Bi_iter, typename _Executor_type>
+    bool _Executor_mixin<_Nfa_type, _Bi_iter, _Executor_type>::
     _M_handle_subexpr_lookahead(const _State_type& __state,
 				_Submatch* __captures)
     {
@@ -181,8 +181,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	&& this->_M_dfs(__state._M_next, __captures);
     }
 
-  template<typename _Bi_iter, typename _Executor_type>
-    bool _Executor_mixin<_Bi_iter, _Executor_type>::
+  template<typename _Nfa_type, typename _Bi_iter, typename _Executor_type>
+    bool _Executor_mixin<_Nfa_type, _Bi_iter, _Executor_type>::
     _M_handle_alternative(const _State_type& __state, _Submatch* __captures)
     {
       if (_M_this()->_M_nfa._M_options() & regex_constants::ECMAScript)
@@ -239,8 +239,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   // Time complexity: \Omega(match_length), O(2^(_M_nfa.size()))
   // Space complexity: \theta(match_results.size() + match_length)
   //
-  template<typename _BiIter, typename _TraitsT, _Style __style>
-    bool _Dfs_executor<_BiIter, _TraitsT, __style>::
+  template<typename _Nfa_type, typename _BiIter, _Style __style>
+    bool _Dfs_executor<_Nfa_type, _BiIter, __style>::
     _M_search_from_first(_StateIdT __start)
     {
       this->_M_current = this->_M_begin;
@@ -253,8 +253,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   // considered for further repetitions.
   //
   // POSIX doesn't specify this, so let's keep them consistent.
-  template<typename _BiIter, typename _TraitsT, _Style __style>
-    bool _Dfs_executor<_BiIter, _TraitsT, __style>::
+  template<typename _Nfa_type, typename _BiIter, _Style __style>
+    bool _Dfs_executor<_Nfa_type, _BiIter, __style>::
     _M_nonreentrant_repeat(_StateIdT __i, _StateIdT __alt,
 			   _Submatch* __captures)
     {
@@ -265,8 +265,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __ret;
     };
 
-  template<typename _BiIter, typename _TraitsT, _Style __style>
-    bool _Dfs_executor<_BiIter, _TraitsT, __style>::
+  template<typename _Nfa_type, typename _BiIter, _Style __style>
+    bool _Dfs_executor<_Nfa_type, _BiIter, __style>::
     _M_handle_subexpr_begin(const _State_type& __state, _Submatch* __captures)
     {
       auto& __res = __captures[__state._M_subexpr];
@@ -279,8 +279,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __ret;
     }
 
-  template<typename _BiIter, typename _TraitsT, _Style __style>
-    bool _Dfs_executor<_BiIter, _TraitsT, __style>::
+  template<typename _Nfa_type, typename _BiIter, _Style __style>
+    bool _Dfs_executor<_Nfa_type, _BiIter, __style>::
     _M_handle_subexpr_end(const _State_type& __state, _Submatch* __captures)
     {
       auto& __res = __captures[__state._M_subexpr];
@@ -294,8 +294,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __ret;
     }
 
-  template<typename _BiIter, typename _TraitsT, _Style __style>
-    bool _Dfs_executor<_BiIter, _TraitsT, __style>::
+  template<typename _Nfa_type, typename _BiIter, _Style __style>
+    bool _Dfs_executor<_Nfa_type, _BiIter, __style>::
     _M_handle_repeat(_StateIdT __state_id, _Submatch* __captures)
     {
       // The most recent repeated state visit is the same, and this->_M_current
@@ -329,8 +329,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
     }
 
-  template<typename _BiIter, typename _TraitsT, _Style __style>
-    bool _Dfs_executor<_BiIter, _TraitsT, __style>::
+  template<typename _Nfa_type, typename _BiIter, _Style __style>
+    bool _Dfs_executor<_Nfa_type, _BiIter, __style>::
     _M_handle_repeated_match(const _State_type& __state, _Submatch* __captures)
     {
       // TODO: Don't use std::function as _Matcher. Use virtual classes and
@@ -397,8 +397,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
     }
 
-  template<typename _BiIter, typename _TraitsT, _Style __style>
-    bool _Dfs_executor<_BiIter, _TraitsT, __style>::
+  template<typename _Nfa_type, typename _BiIter, _Style __style>
+    bool _Dfs_executor<_Nfa_type, _BiIter, __style>::
     _M_handle_match(_StateIdT __state_id, _Submatch* __captures)
     {
       const auto& __state = this->_M_nfa[__state_id];
@@ -414,8 +414,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return false;
     }
 
-  template<typename _BiIter, typename _TraitsT, _Style __style>
-    bool _Dfs_executor<_BiIter, _TraitsT, __style>::
+  template<typename _Nfa_type, typename _BiIter, _Style __style>
+    bool _Dfs_executor<_Nfa_type, _BiIter, __style>::
     _M_handle_backref(const _State_type& __state, _Submatch* __captures)
     {
       auto& __submatch = __captures[__state._M_backref_index];
@@ -455,8 +455,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
     }
 
-  template<typename _BiIter, typename _TraitsT, _Style __style>
-    bool _Dfs_executor<_BiIter, _TraitsT, __style>::
+  template<typename _Nfa_type, typename _BiIter, _Style __style>
+    bool _Dfs_executor<_Nfa_type, _BiIter, __style>::
     _M_handle_accept(const _State_type& __state, _Submatch* __captures)
     {
       bool __has_sol = false;
@@ -525,8 +525,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   //                  O(match_length * _M_nfa.size() * match_results.size())
   // Space complexity: \Omega(_M_nfa.size() + match_results.size())
   //                   O(_M_nfa.size() * match_results.size())
-  template<typename _BiIter, typename _TraitsT, _Style __style>
-    bool _Bfs_executor<_BiIter, _TraitsT, __style>::
+  template<typename _Nfa_type, typename _BiIter, _Style __style>
+    bool _Bfs_executor<_Nfa_type, _BiIter, __style>::
     _M_search_from_first(_StateIdT __start)
     {
       this->_M_current = this->_M_begin;
@@ -556,8 +556,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __ret;
     }
 
-  template<typename _BiIter, typename _TraitsT, _Style __style>
-    bool _Bfs_executor<_BiIter, _TraitsT, __style>::
+  template<typename _Nfa_type, typename _BiIter, _Style __style>
+    bool _Bfs_executor<_Nfa_type, _BiIter, __style>::
     _M_handle_subexpr_begin(const _State_type& __state, _Submatch* __captures)
     {
       auto& __res = __captures[__state._M_subexpr];
@@ -568,8 +568,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __ret;
     }
 
-  template<typename _BiIter, typename _TraitsT, _Style __style>
-    bool _Bfs_executor<_BiIter, _TraitsT, __style>::
+  template<typename _Nfa_type, typename _BiIter, _Style __style>
+    bool _Bfs_executor<_Nfa_type, _BiIter, __style>::
     _M_handle_subexpr_end(const _State_type& __state, _Submatch* __captures)
     {
       auto& __res = __captures[__state._M_subexpr];
@@ -581,8 +581,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __ret;
     }
 
-  template<typename _BiIter, typename _TraitsT, _Style __style>
-    bool _Bfs_executor<_BiIter, _TraitsT, __style>::
+  template<typename _Nfa_type, typename _BiIter, _Style __style>
+    bool _Bfs_executor<_Nfa_type, _BiIter, __style>::
     _M_handle_repeat(_StateIdT __state_id, _Submatch* __captures)
     {
       const auto& __state = this->_M_nfa[__state_id];
@@ -609,8 +609,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
     }
 
-  template<typename _BiIter, typename _TraitsT, _Style __style>
-    bool _Bfs_executor<_BiIter, _TraitsT, __style>::
+  template<typename _Nfa_type, typename _BiIter, _Style __style>
+    bool _Bfs_executor<_Nfa_type, _BiIter, __style>::
     _M_handle_accept(const _State_type& __state, _Submatch* __captures)
     {
       bool __has_sol = false;

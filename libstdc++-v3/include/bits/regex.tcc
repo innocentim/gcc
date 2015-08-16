@@ -62,18 +62,20 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       bool __ret;
       constexpr auto __mode = __match_mode
 	? __regex::_Search_mode::_Match : __regex::_Search_mode::_Search;
+      using _Nfa_type = typename std::decay<decltype(*__re._M_automaton)>::type;
       if (__re.flags() & regex_constants::__polynomial)
 	{
 	  if (__re.flags() & regex_constants::ECMAScript)
 	    {
-	      __regex::_Bfs_executor<_BiIter, _TraitsT, __regex::_Style::_Ecma>
+	      __regex::_Bfs_executor<_Nfa_type, _BiIter, __regex::_Style::_Ecma>
 		__executor(__s, __e, *__re._M_automaton, __flags, __mode,
 			   __res.data());
 	      __ret = __executor.template _M_match<__mode>();
 	    }
 	  else
 	    {
-	      __regex::_Bfs_executor<_BiIter, _TraitsT, __regex::_Style::_Posix>
+	      __regex::_Bfs_executor<_Nfa_type, _BiIter,
+				     __regex::_Style::_Posix>
 		__executor(__s, __e, *__re._M_automaton, __flags, __mode,
 			   __res.data());
 	      __ret = __executor.template _M_match<__mode>();
@@ -83,14 +85,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{
 	  if (__re.flags() & regex_constants::ECMAScript)
 	    {
-	      __regex::_Dfs_executor<_BiIter, _TraitsT, __regex::_Style::_Ecma>
+	      __regex::_Dfs_executor<_Nfa_type, _BiIter, __regex::_Style::_Ecma>
 		__executor( __s, __e, *__re._M_automaton, __flags, __mode,
 			   __res.data());
 	      __ret = __executor.template _M_match<__mode>();
 	    }
 	  else
 	    {
-	      __regex::_Dfs_executor<_BiIter, _TraitsT, __regex::_Style::_Posix>
+	      __regex::_Dfs_executor<_Nfa_type, _BiIter,
+				     __regex::_Style::_Posix>
 		__executor(__s, __e, *__re._M_automaton, __flags, __mode,
 			   __res.data());
 	      __ret = __executor.template _M_match<__mode>();

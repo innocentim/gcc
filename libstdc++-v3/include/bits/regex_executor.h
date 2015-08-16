@@ -53,12 +53,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   enum class _Search_mode : unsigned char { _Match, _Search };
   enum class _Style : unsigned char { _Ecma, _Posix };
 
-  template<typename _Bi_iter, typename _Traits>
+  template<typename _Nfa_type, typename _Bi_iter>
     struct _Context
     {
       using _Char_type = typename iterator_traits<_Bi_iter>::value_type;
+      using _State_type = typename _Nfa_type::_StateT;
 
-      _Context(_Bi_iter __begin, _Bi_iter __end, const _NFA<_Traits>& __nfa,
+      _Context(_Bi_iter __begin, _Bi_iter __end, const _Nfa_type& __nfa,
 	       regex_constants::match_flag_type __flags,
 	       _Search_mode __search_mode)
       : _M_begin(__begin), _M_end(__end), _M_nfa(__nfa),
@@ -94,19 +95,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       bool
       _M_word_boundary() const;
 
-      _Bi_iter                          _M_current;
-      _Bi_iter                          _M_begin;
-      const _Bi_iter                    _M_end;
-      const _NFA<_Traits>&              _M_nfa;
-      regex_constants::match_flag_type  _M_match_flags;
-      _Search_mode                      _M_search_mode;
+      _Bi_iter				_M_current;
+      _Bi_iter				_M_begin;
+      const _Bi_iter			_M_end;
+      const _Nfa_type&			_M_nfa;
+      regex_constants::match_flag_type	_M_match_flags;
+      _Search_mode			_M_search_mode;
     };
 
-  template<typename _Bi_iter, typename _Executor>
+  template<typename _Nfa_type, typename _Bi_iter, typename _Executor>
     class _Executor_mixin
     {
-      using _State_type =
-	  _State<typename iterator_traits<_Bi_iter>::value_type>;
+      using _State_type = typename _Nfa_type::_StateT;
       using _Submatch = sub_match<_Bi_iter>;
 
     protected:
@@ -200,20 +200,19 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    * @brief Takes a regex and an input string and applies backtracking
    * algorithm.
    */
-  template<typename _BiIter, typename _TraitsT, _Style __style>
+  template<typename _Nfa_type, typename _BiIter, _Style __style>
     class _Dfs_executor
-    : private _Context<_BiIter, _TraitsT>,
-      private _Executor_mixin<_BiIter, _Dfs_executor<_BiIter, _TraitsT,
-						     __style>>,
+    : private _Context<_Nfa_type, _BiIter>,
+      private _Executor_mixin<_Nfa_type, _BiIter,
+			      _Dfs_executor<_Nfa_type, _BiIter, __style>>,
       private _Dfs_mixin<_BiIter, __style>
     {
-      using _Context_type = _Context<_BiIter, _TraitsT>;
-      using _State_type =
-	  _State<typename iterator_traits<_BiIter>::value_type>;
+      using _Context_type = _Context<_Nfa_type, _BiIter>;
+      using _State_type = typename _Nfa_type::_StateT;
       using _Submatch = sub_match<_BiIter>;
 
     public:
-      _Dfs_executor(_BiIter __begin, _BiIter __end, const _NFA<_TraitsT>& __nfa,
+      _Dfs_executor(_BiIter __begin, _BiIter __end, const _Nfa_type& __nfa,
 		    regex_constants::match_flag_type __flags,
 		    _Search_mode __search_mode, _Submatch* __results)
       : _Context_type(__begin, __end, __nfa, __flags, __search_mode),
@@ -277,22 +276,21 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     private:
       pair<_StateIdT, _BiIter>		_M_last_rep_visit;
 
-      template<typename, typename>
+      template<typename, typename, typename>
 	friend class _Executor_mixin;
     };
 
-  template<typename _Bi_iter, typename _TraitsT, _Style __style>
+  template<typename _Nfa_type, typename _Bi_iter, _Style __style>
     class _Bfs_executor;
 
   template<typename _Executor_type>
     class _Bfs_mixin;
 
-  template<typename _Bi_iter, typename _Traits>
-    class _Bfs_mixin<_Bfs_executor<_Bi_iter, _Traits, _Style::_Ecma>>
+  template<typename _Nfa_type, typename _Bi_iter>
+    class _Bfs_mixin<_Bfs_executor<_Nfa_type, _Bi_iter, _Style::_Ecma>>
     {
       using _Submatch = sub_match<_Bi_iter>;
-      using _State_type =
-	_State<typename iterator_traits<_Bi_iter>::value_type>;
+      using _State_type = typename _Nfa_type::_StateT;
 
     protected:
       _Bfs_mixin(size_t __size) : _M_visited_states(__size, false) { }
@@ -321,23 +319,22 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { std::fill(_M_visited_states.begin(), _M_visited_states.end(), false); }
 
     private:
-      _Bfs_executor<_Bi_iter, _Traits, _Style::_Ecma>*
+      _Bfs_executor<_Nfa_type, _Bi_iter, _Style::_Ecma>*
       _M_this()
       {
 	return static_cast<
-	    _Bfs_executor<_Bi_iter, _Traits, _Style::_Ecma>*>(this);
+	    _Bfs_executor<_Nfa_type, _Bi_iter, _Style::_Ecma>*>(this);
       }
 
       // Indicates which states are already visited.
       vector<char> _M_visited_states;
     };
 
-  template<typename _Bi_iter, typename _Traits>
-    class _Bfs_mixin<_Bfs_executor<_Bi_iter, _Traits, _Style::_Posix>>
+  template<typename _Nfa_type, typename _Bi_iter>
+    class _Bfs_mixin<_Bfs_executor<_Nfa_type, _Bi_iter, _Style::_Posix>>
     {
       using _Submatch = sub_match<_Bi_iter>;
-      using _State_type =
-	_State<typename iterator_traits<_Bi_iter>::value_type>;
+      using _State_type = typename _Nfa_type::_StateT;
 
     protected:
       _Bfs_mixin(size_t __size) : _M_visited_states(__size, nullptr) { }
@@ -409,11 +406,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_leftmost_longest(const _Submatch* __lhs, const _Submatch* __rhs,
 			  size_t __size);
 
-      _Bfs_executor<_Bi_iter, _Traits, _Style::_Posix>*
+      _Bfs_executor<_Nfa_type, _Bi_iter, _Style::_Posix>*
       _M_this()
       {
 	return static_cast<
-	    _Bfs_executor<_Bi_iter, _Traits, _Style::_Posix>*>(this);
+	    _Bfs_executor<_Nfa_type, _Bi_iter, _Style::_Posix>*>(this);
       }
 
       vector<_Submatch*> _M_visited_states;
@@ -423,21 +420,19 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    * @brief Takes a regex and an input string and applies Thompson NFA
    * algorithm.
    */
-  template<typename _Bi_iter, typename _TraitsT, _Style __style>
+  template<typename _Nfa_type, typename _Bi_iter, _Style __style>
     class _Bfs_executor
-    : private _Context<_Bi_iter, _TraitsT>,
-      private _Executor_mixin<_Bi_iter, _Bfs_executor<_Bi_iter, _TraitsT,
-						      __style>>,
-      private _Bfs_mixin<_Bfs_executor<_Bi_iter, _TraitsT, __style>>
+    : private _Context<_Nfa_type, _Bi_iter>,
+      private _Executor_mixin<_Nfa_type, _Bi_iter,
+			      _Bfs_executor<_Nfa_type, _Bi_iter, __style>>,
+      private _Bfs_mixin<_Bfs_executor<_Nfa_type, _Bi_iter, __style>>
     {
-      using _Context_type = _Context<_Bi_iter, _TraitsT>;
-      using _State_type =
-	_State<typename iterator_traits<_Bi_iter>::value_type>;
+      using _Context_type = _Context<_Nfa_type, _Bi_iter>;
+      using _State_type = typename _Nfa_type::_StateT;
       using _Submatch = sub_match<_Bi_iter>;
 
     public:
-      _Bfs_executor(_Bi_iter __begin, _Bi_iter __end,
-		    const _NFA<_TraitsT>& __nfa,
+      _Bfs_executor(_Bi_iter __begin, _Bi_iter __end, const _Nfa_type& __nfa,
 		    regex_constants::match_flag_type __flags,
 		    _Search_mode __search_mode, _Submatch* __results)
       : _Context_type(__begin, __end, __nfa, __flags, __search_mode),
@@ -508,7 +503,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       // Saves states that need to be considered for the next character.
       vector<pair<_StateIdT, vector<_Submatch>>>	_M_match_queue;
 
-      template<typename, typename>
+      template<typename, typename, typename>
 	friend class _Executor_mixin;
       template<typename>
 	friend class _Bfs_mixin;
