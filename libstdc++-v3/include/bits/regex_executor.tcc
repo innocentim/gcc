@@ -109,7 +109,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  case _S_opcode_subexpr_lookahead:
 	    return _M_this()->_M_handle_subexpr_lookahead(__state, __captures);
 	  case _S_opcode_match:
-	    return _M_this()->_M_handle_match(__state, __captures);
+	    return _M_this()->_M_handle_match(__state_id, __captures);
 	  case _S_opcode_backref:
 	    return _M_this()->_M_handle_backref(__state, __captures);
 	  case _S_opcode_accept:
@@ -329,8 +329,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _BiIter, typename _TraitsT, _Style __style>
     bool _Dfs_executor<_BiIter, _TraitsT, __style>::
-    _M_handle_match(const _State_type& __state, _Submatch* __captures)
+    _M_handle_match(_StateIdT __state_id, _Submatch* __captures)
     {
+      const auto& __state = this->_M_nfa[__state_id];
       if (this->_M_current == this->_M_end)
 	return false;
       if (__state._M_matches(*this->_M_current))

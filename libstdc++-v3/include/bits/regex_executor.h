@@ -260,7 +260,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_handle_repeat(_StateIdT __state_id, _Submatch* __captures);
 
       bool
-      _M_handle_match(const _State_type& __state, _Submatch* __captures);
+      _M_handle_match(_StateIdT __state_id, _Submatch* __captures);
 
       bool
       _M_handle_backref(const _State_type& __state, _Submatch* __captures);
@@ -304,12 +304,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       }
 
       bool
-      _M_handle_match(const _State_type& __state, _Submatch* __captures)
+      _M_handle_match(_StateIdT __state_id, _Submatch* __captures)
       {
+	const auto& __state = _M_this()->_M_nfa[__state_id];
 	if (_M_this()->_M_current != _M_this()->_M_end)
 	  if (__state._M_matches(*_M_this()->_M_current))
-	    _M_this()->_M_queue(__state._M_next, __captures,
-				_M_this()->_M_sub_count());
+	    _M_this()->_M_queue(__state._M_next, __captures);
 	return false;
       }
 
@@ -342,21 +342,49 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       bool
       _M_handle_visit(_StateIdT __state_id, _Submatch* __results)
       {
-	if (_M_visited_states[__state_id]
-	    && !_M_leftmost_longest(__results, _M_visited_states[__state_id],
+	auto& __visited_state = _M_this()->_M_visited_states[__state_id];
+	if (__visited_state
+	    && !_M_leftmost_longest(__results, __visited_state,
 				    _M_this()->_M_sub_count()))
 	  return true;
-	_M_visited_states[__state_id] = __results;
+	// We store different content in _M_visited_states for _S_opcode_match.
+	// Let _M_handle_match handle it.
+	if (_M_this()->_M_nfa[__state_id]._M_opcode() != _S_opcode_match)
+	  __visited_state = __results;
 	return false;
       }
 
       bool
-      _M_handle_match(const _State_type& __state, _Submatch* __captures)
+      _M_handle_match(_StateIdT __state_id, _Submatch* __captures)
       {
+	// For a state who's opcode is not _S_opcode_match, _M_visited_states
+	// stores the captures address from __old_queue, just in case other
+	// matching process wants to compete with it (so they can do
+	// leftmost lonest competing);
+	//
+	// For a state who's opcode is _S_opcode_match, _M_visited_states
+	// stores the captures address from _M_match_queue. When current state
+	// wins, in theory we should delete the loser from _M_visited_states
+	// and insert the new winner. To make it fast, we directly copy
+	// winner's content to the loser's storage.
+	//
+	// If this state isn't in _M_match_queue, allocate a new one.
+	const auto& __state = _M_this()->_M_nfa[__state_id];
 	if (_M_this()->_M_current != _M_this()->_M_end)
 	  if (__state._M_matches(*_M_this()->_M_current))
-	    _M_this()->_M_queue(__state._M_next, __captures,
-				_M_this()->_M_sub_count());
+	    {
+	      auto& __visited_state = _M_this()->_M_visited_states[__state_id];
+	      if (__visited_state)
+		{
+		  std::copy(__captures, __captures + _M_this()->_M_sub_count(),
+			    __visited_state);
+		}
+	      else
+		{
+		  __visited_state =
+		    _M_this()->_M_queue(__state._M_next, __captures);
+		}
+	    }
 	return false;
       }
 
@@ -385,7 +413,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    _Bfs_executor<_Bi_iter, _Traits, _Style::_Posix>*>(this);
       }
 
-      vector<const _Submatch*> _M_visited_states;
+      vector<_Submatch*> _M_visited_states;
     };
 
   /**
@@ -457,10 +485,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       bool
       _M_handle_accept(const _State_type& __state, _Submatch* __captures);
 
-      void _M_queue(_StateIdT __i, const _Submatch* __captures, size_t __size)
+      _Submatch* _M_queue(_StateIdT __i, const _Submatch* __captures)
       {
 	_M_match_queue.emplace_back(
-	  __i, vector<_Submatch>{__captures, __captures + __size});
+	  __i, vector<_Submatch>{__captures,
+				 __captures + this->_M_sub_count()});
+	return _M_match_queue.back().second.data();
       }
 
     public:
