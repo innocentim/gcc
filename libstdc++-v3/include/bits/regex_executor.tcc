@@ -108,6 +108,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    return _M_this()->_M_handle_word_boundary(__state, __captures);
 	  case _S_opcode_subexpr_lookahead:
 	    return _M_this()->_M_handle_subexpr_lookahead(__state, __captures);
+	  case _S_opcode_repeated_match:
+	    return _M_this()->_M_handle_repeated_match(__state, __captures);
 	  case _S_opcode_match:
 	    return _M_this()->_M_handle_match(__state_id, __captures);
 	  case _S_opcode_backref:
@@ -324,6 +326,74 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  __glibcxx_assert(this->_M_is_ecma());
 	  return this->_M_dfs(__state._M_next, __captures)
 	    || _M_nonreentrant_repeat(__state_id, __state._M_alt, __captures);
+	}
+    }
+
+  template<typename _BiIter, typename _TraitsT, _Style __style>
+    bool _Dfs_executor<_BiIter, _TraitsT, __style>::
+    _M_handle_repeated_match(const _State_type& __state, _Submatch* __captures)
+    {
+      // TODO: Don't use std::function as _Matcher. Use virtual classes and
+      // expose not only single match, but also multi-match virtual
+      // functions to avoid repeated virtual dispatches.
+      if (_M_is_ecma())
+	{
+	  if (!__state._M_neg)
+	    {
+	      auto __original = this->_M_current;
+	      while (this->_M_current != this->_M_end
+		     && __state._M_matches(*this->_M_current))
+		++this->_M_current;
+	      while (1)
+		{
+		  if (this->_M_dfs(__state._M_next, __captures))
+		    {
+		      this->_M_current = std::move(__original);
+		      return true;
+		    }
+		  if (this->_M_current == __original)
+		    {
+		      this->_M_current = std::move(__original);
+		      return false;
+		    }
+		  --this->_M_current;
+		}
+	      __glibcxx_assert(false);
+	      return false;
+	    }
+	  else
+	    {
+	      if (this->_M_dfs(__state._M_next, __captures))
+		return true;
+	      auto __original = this->_M_current;
+	      while (this->_M_current != this->_M_end
+		     && __state._M_matches(*this->_M_current))
+		{
+		  ++this->_M_current;
+		  if (this->_M_dfs(__state._M_next, __captures))
+		    {
+		      this->_M_current = std::move(__original);
+		      return true;
+		    }
+		}
+	      this->_M_current = std::move(__original);
+	      return false;
+	    }
+	}
+      else
+	{
+	  bool __ret = false;
+	  auto __original = this->_M_current;
+	  __ret |= this->_M_dfs(__state._M_next, __captures);
+	  while (this->_M_current != this->_M_end
+		 && __state._M_matches(*this->_M_current))
+	    {
+	      ++this->_M_current;
+	      if (this->_M_dfs(__state._M_next, __captures))
+		__ret |= this->_M_dfs(__state._M_next, __captures);
+	    }
+	  this->_M_current = std::move(__original);
+	  return __ret;
 	}
     }
 

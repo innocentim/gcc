@@ -181,40 +181,32 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _Compiler<_TraitsT>::
     _M_quantifier()
     {
-      bool __neg = (_M_flags & regex_constants::ECMAScript);
-      auto __init = [this, &__neg]()
-	{
-	  if (_M_stack.empty())
-	    __throw_regex_error(regex_constants::error_badrepeat,
-				"Nothing to repeat before a quantifier.");
-	  __neg = __neg && _M_match_token(_ScannerT::_S_token_opt);
-	};
+      if (_M_stack.empty())
+	__throw_regex_error(regex_constants::error_badrepeat,
+			    "Nothing to repeat before a quantifier.");
       if (_M_match_token(_ScannerT::_S_token_closure0))
 	{
-	  __init();
 	  auto __e = _M_pop();
 	  _StateSeqT __r(*_M_nfa,
 			 _M_nfa->_M_insert_repeat(_S_invalid_state_id,
-						  __e._M_start, __neg));
+						  __e._M_start, _M_try_opt()));
 	  __e._M_append(__r);
 	  _M_stack.push(__r);
 	}
       else if (_M_match_token(_ScannerT::_S_token_closure1))
 	{
-	  __init();
 	  auto __e = _M_pop();
 	  __e._M_append(_M_nfa->_M_insert_repeat(_S_invalid_state_id,
-						 __e._M_start, __neg));
+						 __e._M_start, _M_try_opt()));
 	  _M_stack.push(__e);
 	}
       else if (_M_match_token(_ScannerT::_S_token_opt))
 	{
-	  __init();
 	  auto __e = _M_pop();
 	  auto __end = _M_nfa->_M_insert_dummy();
 	  _StateSeqT __r(*_M_nfa,
 			 _M_nfa->_M_insert_repeat(_S_invalid_state_id,
-						  __e._M_start, __neg));
+						  __e._M_start, _M_try_opt()));
 	  __e._M_append(__end);
 	  __r._M_append(__end);
 	  _M_stack.push(__r);
@@ -245,7 +237,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    __throw_regex_error(regex_constants::error_brace,
 				"Unexpected end of brace expression.");
 
-	  __neg = __neg && _M_match_token(_ScannerT::_S_token_opt);
+	  auto __neg = _M_try_opt();
 
 	  for (long __i = 0; __i < __min_rep; ++__i)
 	    __e._M_append(__r._M_clone());
@@ -294,16 +286,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 #define __INSERT_REGEX_MATCHER(__func, args...)\
 	do\
-	  if (!(_M_flags & regex_constants::icase))\
-	    if (!(_M_flags & regex_constants::collate))\
-	      __func<false, false>(args);\
+	  {\
+	    if (!(_M_flags & regex_constants::icase))\
+	      if (!(_M_flags & regex_constants::collate))\
+		_M_insert_matcher(__func<false, false>(args));\
+	      else\
+		_M_insert_matcher(__func<false, true>(args));\
 	    else\
-	      __func<false, true>(args);\
-	  else\
-	    if (!(_M_flags & regex_constants::collate))\
-	      __func<true, false>(args);\
-	    else\
-	      __func<true, true>(args);\
+	      if (!(_M_flags & regex_constants::collate))\
+		_M_insert_matcher(__func<true, false>(args));\
+	      else\
+		_M_insert_matcher(__func<true, true>(args));\
+	  }\
 	while (false)
 
   template<typename _TraitsT>
@@ -367,43 +361,31 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _TraitsT>
   template<bool __icase, bool __collate>
-    void
+    _Matcher<typename _TraitsT::char_type>
     _Compiler<_TraitsT>::
     _M_insert_any_matcher_ecma()
-    {
-      _M_stack.push(_StateSeqT(*_M_nfa,
-	_M_nfa->_M_insert_matcher
-	  (_AnyMatcher<_TraitsT, true, __icase, __collate>
-	    (_M_traits))));
-    }
+    { return _AnyMatcher<_TraitsT, true, __icase, __collate>(_M_traits); }
 
   template<typename _TraitsT>
   template<bool __icase, bool __collate>
-    void
+    _Matcher<typename _TraitsT::char_type>
     _Compiler<_TraitsT>::
     _M_insert_any_matcher_posix()
-    {
-      _M_stack.push(_StateSeqT(*_M_nfa,
-	_M_nfa->_M_insert_matcher
-	  (_AnyMatcher<_TraitsT, false, __icase, __collate>
-	    (_M_traits))));
-    }
+    { return _AnyMatcher<_TraitsT, false, __icase, __collate>(_M_traits); }
 
   template<typename _TraitsT>
   template<bool __icase, bool __collate>
-    void
+    _Matcher<typename _TraitsT::char_type>
     _Compiler<_TraitsT>::
     _M_insert_char_matcher()
     {
-      _M_stack.push(_StateSeqT(*_M_nfa,
-	_M_nfa->_M_insert_matcher
-	  (_CharMatcher<_TraitsT, __icase, __collate>
-	    (_M_value[0], _M_traits))));
+      return _CharMatcher<_TraitsT, __icase, __collate>(_M_value[0],
+							_M_traits);
     }
 
   template<typename _TraitsT>
   template<bool __icase, bool __collate>
-    void
+    _Matcher<typename _TraitsT::char_type>
     _Compiler<_TraitsT>::
     _M_insert_character_class_matcher()
     {
@@ -412,13 +394,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	(_M_ctype.is(_CtypeT::upper, _M_value[0]), _M_traits);
       __matcher._M_add_character_class(_M_value, false);
       __matcher._M_ready();
-      _M_stack.push(_StateSeqT(*_M_nfa,
-	_M_nfa->_M_insert_matcher(std::move(__matcher))));
+      return __matcher;
     }
 
   template<typename _TraitsT>
   template<bool __icase, bool __collate>
-    void
+    _Matcher<typename _TraitsT::char_type>
     _Compiler<_TraitsT>::
     _M_insert_bracket_matcher(bool __neg)
     {
@@ -434,9 +415,35 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  }
       while (_M_expression_term(__last_char, __matcher));
       __matcher._M_ready();
-      _M_stack.push(_StateSeqT(
-		      *_M_nfa,
-		      _M_nfa->_M_insert_matcher(std::move(__matcher))));
+      return __matcher;
+    }
+
+  template<typename _TraitsT>
+    void _Compiler<_TraitsT>::
+    _M_insert_matcher(_Matcher<_CharT> __matcher)
+    {
+      if (!(_M_flags & regex_constants::__polynomial))
+	{
+	  if (_M_match_token(_ScannerT::_S_token_closure0))
+	    {
+	      _M_stack.push(
+		_StateSeqT(
+		  *_M_nfa,
+		  _M_nfa->_M_insert_repeated_matcher(
+		    std::move(__matcher), _M_try_opt())));
+	      return;
+	    }
+	  else if (_M_match_token(_ScannerT::_S_token_closure1))
+	    {
+	      _StateSeqT __seq(*_M_nfa, _M_nfa->_M_insert_matcher(__matcher));
+	      __seq._M_append(_M_nfa->_M_insert_repeated_matcher(
+		   std::move(__matcher), _M_try_opt()));
+	      _M_stack.push(std::move(__seq));
+	      return;
+	    }
+	}
+      _M_stack.push(
+	_StateSeqT(*_M_nfa, _M_nfa->_M_insert_matcher(std::move(__matcher))));
     }
 
   template<typename _TraitsT>

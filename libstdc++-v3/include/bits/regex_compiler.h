@@ -97,24 +97,27 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_bracket_expression();
 
       template<bool __icase, bool __collate>
-	void
+	_Matcher<_CharT>
 	_M_insert_any_matcher_ecma();
 
       template<bool __icase, bool __collate>
-	void
+	_Matcher<_CharT>
 	_M_insert_any_matcher_posix();
 
       template<bool __icase, bool __collate>
-	void
+	_Matcher<_CharT>
 	_M_insert_char_matcher();
 
       template<bool __icase, bool __collate>
-	void
+	_Matcher<_CharT>
 	_M_insert_character_class_matcher();
 
       template<bool __icase, bool __collate>
-	void
+	_Matcher<_CharT>
 	_M_insert_bracket_matcher(bool __neg);
+
+      void
+      _M_insert_matcher(_Matcher<_CharT> __matcher);
 
       // Returns true if successfully matched one term and should continue.
       // Returns false if the compiler should move on.
@@ -129,6 +132,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       bool
       _M_try_char();
+
+      bool
+      _M_try_opt()
+      {
+	if (!_M_match_token(_ScannerT::_S_token_opt))
+	  return false;
+	if (!(_M_flags & regex_constants::ECMAScript))
+	  __throw_regex_error(
+	    regex_constants::error_badrepeat,
+	    "Unexpected question mark in non-ECMAScript style");
+	return true;
+      }
 
       _StateSeqT
       _M_pop()

@@ -260,6 +260,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_handle_repeat(_StateIdT __state_id, _Submatch* __captures);
 
       bool
+      _M_handle_repeated_match(const _State_type&, _Submatch*);
+
+      bool
       _M_handle_match(_StateIdT __state_id, _Submatch* __captures);
 
       bool
@@ -474,6 +477,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       bool
       _M_handle_repeat(_StateIdT __state_id, _Submatch* __captures);
+
+      bool
+      _M_handle_repeated_match(const _State_type&, _Submatch*)
+      {
+	__glibcxx_assert(false);
+	return false;
+      }
 
       bool
       _M_handle_backref(const _State_type& __state, _Submatch* __captures)

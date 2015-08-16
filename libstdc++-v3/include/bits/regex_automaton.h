@@ -68,6 +68,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _S_opcode_dummy,
       _S_opcode_match,
       _S_opcode_accept,
+      // Specifically for "x*", where x is a _Matcher<char_type>
+      _S_opcode_repeated_match,
   };
 
   struct _State_base
@@ -87,10 +89,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	// _S_opcode_subexpr_lookahead
 	_StateIdT  _M_alt;
 	// for _S_opcode_word_boundary or _S_opcode_subexpr_lookahead or
-	// quantifiers (ungreedy if set true)
+	// quantifiers or _S_opcode_repeated_match (ungreedy if set true).
 	bool       _M_neg;
       };
-      // For _S_opcode_match
+      // For _S_opcode_match and _S_opcode_repeated_match
       __gnu_cxx::__aligned_membuf<_Matcher<char>> _M_matcher_storage;
     };
 
@@ -106,6 +108,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return _M_opcode == _S_opcode_alternative
 	|| _M_opcode == _S_opcode_repeat
 	|| _M_opcode == _S_opcode_subexpr_lookahead;
+    }
+
+    bool
+    _M_has_matcher()
+    {
+      return _M_opcode == _S_opcode_repeated_match
+	|| _M_opcode == _S_opcode_match;
     }
 
 #ifdef _GLIBCXX_DEBUG
@@ -132,20 +141,20 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       explicit
       _State(_Opcode __opcode) : _State_base(__opcode)
       {
-	if (_M_opcode() == _S_opcode_match)
+	if (this->_M_has_matcher())
 	  new (this->_M_matcher_storage._M_addr()) _MatcherT();
       }
 
       _State(const _State& __rhs) : _State_base(__rhs)
       {
-	if (__rhs._M_opcode() == _S_opcode_match)
+	if (this->_M_has_matcher())
 	  new (this->_M_matcher_storage._M_addr())
 	    _MatcherT(__rhs._M_get_matcher());
       }
 
       _State(_State&& __rhs) : _State_base(__rhs)
       {
-	if (__rhs._M_opcode() == _S_opcode_match)
+	if (this->_M_has_matcher())
 	  new (this->_M_matcher_storage._M_addr())
 	    _MatcherT(std::move(__rhs._M_get_matcher()));
       }
@@ -155,7 +164,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       ~_State()
       {
-	if (_M_opcode() == _S_opcode_match)
+	if (this->_M_has_matcher())
 	  _M_get_matcher().~_MatcherT();
       }
 
@@ -268,6 +277,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       {
 	_StateT __tmp(_S_opcode_match);
 	__tmp._M_get_matcher() = std::move(__m);
+	return _M_insert_state(std::move(__tmp));
+      }
+
+      _StateIdT
+      _M_insert_repeated_matcher(_MatcherT __m, bool __neg)
+      {
+	__glibcxx_assert(!(_M_options() & regex_constants::__polynomial));
+	_StateT __tmp(_S_opcode_repeated_match);
+	__tmp._M_get_matcher() = std::move(__m);
+	__tmp._M_neg = __neg;
 	return _M_insert_state(std::move(__tmp));
       }
 
