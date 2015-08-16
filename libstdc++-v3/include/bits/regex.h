@@ -45,12 +45,8 @@ namespace __detail
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
-  enum class _RegexExecutorPolicy : int
-    { _S_auto, _S_alternate };
-
   template<typename _BiIter, typename _Alloc,
 	   typename _CharT, typename _TraitsT,
-	   _RegexExecutorPolicy __policy,
 	   bool __match_mode>
     bool
     __regex_algo_impl(_BiIter                              __s,
@@ -725,6 +721,9 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       {
 	std::swap(__loc, _M_loc);
 	_M_automaton.reset();
+#ifdef _GLIBCXX_REGEX_KEEP_STRING
+	_M_original.clear();
+#endif
 	return __loc;
       }
 
@@ -748,12 +747,21 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 	std::swap(_M_flags, __rhs._M_flags);
 	std::swap(_M_loc, __rhs._M_loc);
 	std::swap(_M_automaton, __rhs._M_automaton);
+#ifdef _GLIBCXX_REGEX_KEEP_STRING
+	std::swap(_M_original, __rhs._M_original);
+#endif
       }
 
 #ifdef _GLIBCXX_DEBUG
       void
       _M_dot(std::ostream& __ostr)
       { _M_automaton->_M_dot(__ostr); }
+#endif
+
+#ifdef _GLIBCXX_REGEX_KEEP_STRING
+      string_type
+      _M_original_string() const
+      { return _M_original; }
 #endif
 
     private:
@@ -765,10 +773,12 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 	: _M_flags(__f), _M_loc(std::move(__loc)),
 	_M_automaton(__detail::__compile_nfa<_FwdIter, _Rx_traits>(
 	  std::move(__first), std::move(__last), _M_loc, _M_flags))
+#ifdef _GLIBCXX_REGEX_KEEP_STRING
+	, _M_original(__first, __last)
+#endif
 	{ }
 
-      template<typename _Bp, typename _Ap, typename _Cp, typename _Rp,
-	__detail::_RegexExecutorPolicy, bool>
+      template<typename _Bp, typename _Ap, typename _Cp, typename _Rp, bool>
 	friend bool
 	__detail::__regex_algo_impl(_Bp, _Bp, match_results<_Bp, _Ap>&,
 				    const basic_regex<_Cp, _Rp>&,
@@ -780,6 +790,9 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       flag_type              _M_flags;
       locale_type            _M_loc;
       _AutomatonPtr          _M_automaton;
+#ifdef _GLIBCXX_REGEX_KEEP_STRING
+      string_type            _M_original;
+#endif
     };
 
   /** @brief Standard regular expressions. */
@@ -1858,8 +1871,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       template<typename, typename, typename>
 	friend class regex_iterator;
 
-      template<typename _Bp, typename _Ap, typename _Cp, typename _Rp,
-	__detail::_RegexExecutorPolicy, bool>
+      template<typename _Bp, typename _Ap, typename _Cp, typename _Rp, bool>
 	friend bool
 	__detail::__regex_algo_impl(_Bp, _Bp, match_results<_Bp, _Ap>&,
 				    const basic_regex<_Cp, _Rp>&,
@@ -1987,8 +1999,7 @@ _GLIBCXX_END_NAMESPACE_CXX11
 			       = regex_constants::match_default)
     {
       return __detail::__regex_algo_impl<_Bi_iter, _Alloc, _Ch_type, _Rx_traits,
-	__detail::_RegexExecutorPolicy::_S_auto, true>
-	  (__s, __e, __m, __re, __flags);
+					 true>(__s, __e, __m, __re, __flags);
     }
 
   /**
@@ -2144,8 +2155,7 @@ _GLIBCXX_END_NAMESPACE_CXX11
 		 = regex_constants::match_default)
     {
       return __detail::__regex_algo_impl<_Bi_iter, _Alloc, _Ch_type, _Rx_traits,
-	__detail::_RegexExecutorPolicy::_S_auto, false>
-	  (__s, __e, __m, __re, __flags);
+					 false>(__s, __e, __m, __re, __flags);
     }
 
   /**

@@ -23,7 +23,6 @@
 // 28.11.2 regex_match
 // Tests awk escaping.
 
-#include <regex>
 #include <testsuite_hooks.h>
 #include <testsuite_regex.h>
 

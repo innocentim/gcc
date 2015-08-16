@@ -23,7 +23,6 @@
 // 28.11.3 regex_search
 // Tests ECMAScript greedy and ungreedy quantifiers.
 
-#include <regex>
 #include <testsuite_hooks.h>
 #include <testsuite_regex.h>
 

@@ -17,7 +17,6 @@
 // with this library; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
 
-#include <regex>
 #include <testsuite_hooks.h>
 #include <testsuite_regex.h>
 #include <testsuite_allocator.h>

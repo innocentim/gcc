@@ -42,7 +42,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   // That __match_mode is true means regex_match, else regex_search.
   template<typename _BiIter, typename _Alloc,
 	   typename _CharT, typename _TraitsT,
-	   _RegexExecutorPolicy __policy,
 	   bool __match_mode>
     bool
     __regex_algo_impl(_BiIter                              __s,
@@ -63,9 +62,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       bool __ret;
       constexpr auto __mode = __match_mode
 	? __regex::_Search_mode::_Match : __regex::_Search_mode::_Search;
-      if ((__re.flags() & regex_constants::__polynomial)
-	  || (__policy == _RegexExecutorPolicy::_S_alternate
-	      && !__re._M_automaton->_M_has_backref))
+      if (__re.flags() & regex_constants::__polynomial)
 	{
 	  if (__re.flags() & regex_constants::ECMAScript)
 	    {

@@ -23,7 +23,6 @@
 // 28.11.2 regex_match
 // Tests ECMAScript "." against a std::string.
 
-#include <regex>
 #include <testsuite_hooks.h>
 #include <testsuite_regex.h>
 

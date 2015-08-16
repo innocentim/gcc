@@ -23,7 +23,6 @@
 // 28.11.2 regex_match
 // Tests Extended bracket expression against a C-string.
 
-#include <regex>
 #include <testsuite_hooks.h>
 #include <testsuite_regex.h>
 

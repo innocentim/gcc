@@ -23,7 +23,6 @@
 // 28.11.2 regex_match
 // Tests BRE against a std::string target, exercising range {0,3}
 
-#include <regex>
 #include <testsuite_hooks.h>
 #include <testsuite_regex.h>
 

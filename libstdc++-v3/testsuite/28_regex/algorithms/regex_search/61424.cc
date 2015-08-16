@@ -19,7 +19,6 @@
 
 // PR libstdc++/61424
 
-#include <regex>
 #include <testsuite_hooks.h>
 #include <testsuite_regex.h>
 

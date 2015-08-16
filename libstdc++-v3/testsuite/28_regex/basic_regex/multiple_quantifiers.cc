@@ -20,7 +20,6 @@
 // 28.8 basic_regex
 // Tests multiple consecutive quantifiers
 
-#include <regex>
 #include <testsuite_hooks.h>
 #include <testsuite_regex.h>
 

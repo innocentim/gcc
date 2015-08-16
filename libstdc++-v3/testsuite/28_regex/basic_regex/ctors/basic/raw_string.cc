@@ -21,7 +21,6 @@
 
 // basic_regex constructors + raw string literals
 
-#include <regex>
 #include <testsuite_regex.h>
 
 void

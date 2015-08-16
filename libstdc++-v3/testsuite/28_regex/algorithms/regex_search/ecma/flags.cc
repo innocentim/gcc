@@ -23,7 +23,6 @@
 // 28.11.3 regex_search
 // Tests ECMAScript flags.
 
-#include <regex>
 #include <testsuite_hooks.h>
 #include <testsuite_regex.h>
 

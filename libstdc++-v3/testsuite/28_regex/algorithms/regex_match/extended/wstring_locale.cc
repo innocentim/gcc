@@ -24,7 +24,6 @@
 // 28.11.2 regex_match
 // Tests Extended localization against a wide-string.
 
-#include <regex>
 #include <testsuite_hooks.h>
 #include <testsuite_regex.h>
 

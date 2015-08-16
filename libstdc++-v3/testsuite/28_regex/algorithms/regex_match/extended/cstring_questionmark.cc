@@ -23,7 +23,6 @@
 // 28.11.2 regex_match
 // Tests ERE against a C-string target, question-mark match.
 
-#include <regex>
 #include <testsuite_hooks.h>
 #include <testsuite_regex.h>
 

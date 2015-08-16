@@ -23,7 +23,6 @@
 // 28.11.2 regex_match
 // Tests ECMAScript \d \D \s \S \w \W
 
-#include <regex>
 #include <testsuite_hooks.h>
 #include <testsuite_regex.h>
 

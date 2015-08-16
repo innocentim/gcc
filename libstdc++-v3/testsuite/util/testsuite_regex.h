@@ -22,6 +22,7 @@
 #ifndef _TESTSUITE_REGEX_H
 #define _TESTSUITE_REGEX_H 1
 
+#define _GLIBCXX_REGEX_KEEP_STRING
 #include <regex>
 #include <stdexcept>
 #include <iostream>
@@ -144,16 +145,27 @@ namespace __gnu_test
     {
       using namespace std::__detail;
       auto __res1 = __regex_algo_impl<_Bi_iter, _Alloc, _Ch_type, _Rx_traits,
-	   _RegexExecutorPolicy::_S_auto, true>
-	(__s, __e, __m, __re, __flags);
+				      true>(__s, __e, __m, __re, __flags);
       match_results<_Bi_iter, _Alloc> __mm;
-      auto __res2 = __regex_algo_impl<_Bi_iter, _Alloc, _Ch_type, _Rx_traits,
-	   _RegexExecutorPolicy::_S_alternate, true>
-	(__s, __e, __mm, __re, __flags);
-      // __m is unspecified if return value is false.
-      if (__res1 == __res2 && (!__res1 || __m == __mm))
-	return __res1;
-      throw std::exception();
+      basic_regex<_Ch_type, _Rx_traits> __re2;
+      __re2.imbue(__re.getloc());
+      try
+	{
+	  __re2.assign(__re._M_original_string(),
+		       __re.flags() | std::regex_constants::__polynomial);
+	  auto __res2 = __regex_algo_impl<_Bi_iter, _Alloc, _Ch_type, _Rx_traits,
+					  true>(__s, __e, __mm, __re2, __flags);
+	  // __m is unspecified if return value is false.
+	  if (__res1 != __res2 || __m != __mm)
+	    throw std::exception();
+	}
+      catch (std::regex_error __e)
+	{
+	  if (__e.code() != std::regex_constants::error_complexity
+	      && __e.code() != std::regex_constants::error_badrepeat)
+	    throw;
+	}
+      return __res1;
     }
 
   // No match_results version
@@ -231,15 +243,26 @@ namespace __gnu_test
     {
       using namespace std::__detail;
       auto __res1 = __regex_algo_impl<_Bi_iter, _Alloc, _Ch_type, _Rx_traits,
-	   _RegexExecutorPolicy::_S_auto, false>
-        (__s, __e, __m, __re, __flags);
+				      false>(__s, __e, __m, __re, __flags);
       match_results<_Bi_iter, _Alloc> __mm;
-      auto __res2 = __regex_algo_impl<_Bi_iter, _Alloc, _Ch_type, _Rx_traits,
-	   _RegexExecutorPolicy::_S_alternate, false>
-        (__s, __e, __mm, __re, __flags);
-      if (__res1 == __res2 && __m == __mm)
-        return __res1;
-      throw(std::exception()); // Let test fail. Give it a name.
+      basic_regex<_Ch_type, _Rx_traits> __re2;
+      __re2.imbue(__re.getloc());
+      try
+	{
+	  __re2.assign(__re._M_original_string(),
+		       __re.flags() | std::regex_constants::__polynomial);
+	  auto __res2 = __regex_algo_impl<_Bi_iter, _Alloc, _Ch_type, _Rx_traits,
+					  false>(__s, __e, __mm, __re2, __flags);
+	  if (__res1 != __res2 || __m != __mm)
+	    throw(std::exception()); // Let test fail. Give it a name.
+	}
+      catch (std::regex_error __e)
+	{
+	  if (__e.code() != std::regex_constants::error_complexity
+	      && __e.code() != std::regex_constants::error_badrepeat)
+	    throw;
+	}
+      return __res1;
     }
 
   // No match_results version
