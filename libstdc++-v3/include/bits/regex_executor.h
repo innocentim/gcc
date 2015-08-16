@@ -155,7 +155,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       using _Submatch = sub_match<_Bi_iter>;
 
-    public:
+    protected:
       _Dfs_mixin(_Submatch* __results, size_t __sub_count)
       : _M_results(__results) { }
 
@@ -175,7 +175,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       using _Submatch = sub_match<_Bi_iter>;
 
-    public:
+    protected:
       _Dfs_mixin(_Submatch* __results, size_t __sub_count)
       : _M_results(__results), _M_current_res(__sub_count) { }
 
@@ -271,7 +271,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       bool
       _M_nonreentrant_repeat(_StateIdT, _StateIdT, _Submatch* __captures);
 
-    public:
+    private:
       pair<_StateIdT, _BiIter>		_M_last_rep_visit;
 
       template<typename, typename>
@@ -291,7 +291,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using _State_type =
 	_State<typename iterator_traits<_Bi_iter>::value_type>;
 
-    public:
+    protected:
       _Bfs_mixin(size_t __size) : _M_visited_states(__size, false) { }
 
       bool
@@ -336,7 +336,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using _State_type =
 	_State<typename iterator_traits<_Bi_iter>::value_type>;
 
-    public:
+    protected:
       _Bfs_mixin(size_t __size) : _M_visited_states(__size, nullptr) { }
 
       bool
@@ -493,7 +493,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	return _M_match_queue.back().second.data();
       }
 
-    public:
+    private:
       _Submatch*      				_M_results;
       // Saves states that need to be considered for the next character.
       vector<pair<_StateIdT, vector<_Submatch>>>	_M_match_queue;
