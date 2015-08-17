@@ -130,8 +130,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 			      _Submatch* __captures);
 
       bool
-      _M_handle_subexpr_lookahead(const _State_type& __state,
-				  _Submatch* __captures);
+      _M_handle_subexpr_lookahead(
+	const _State_type& __state,
+	_Submatch* __captures) __attribute__((noinline));
 
       bool
       _M_handle_alternative(const _State_type& __state, _Submatch* __captures);
@@ -249,29 +250,35 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       bool
       _M_handle_subexpr_begin(const _State_type& __state,
-			      _Submatch* __captures);
+			      _Submatch* __captures) __attribute__((noinline));
 
       bool
       _M_handle_subexpr_end(const _State_type& __state,
-			    _Submatch* __captures);
+			    _Submatch* __captures) __attribute__((noinline));
 
       bool
-      _M_handle_repeat(_StateIdT __state_id, _Submatch* __captures);
+      _M_handle_repeat(_StateIdT __state_id,
+		       _Submatch* __captures) __attribute__((noinline));
 
       bool
-      _M_handle_repeated_match(const _State_type&, _Submatch*);
+      _M_handle_repeated_match(const _State_type&,
+			       _Submatch*) __attribute__((noinline));
 
       bool
-      _M_handle_match(_StateIdT __state_id, _Submatch* __captures);
+      _M_handle_match(_StateIdT __state_id,
+		      _Submatch* __captures) __attribute__((noinline));
 
       bool
-      _M_handle_backref(const _State_type& __state, _Submatch* __captures);
+      _M_handle_backref(const _State_type& __state,
+			_Submatch* __captures) __attribute__((noinline));
 
       bool
-      _M_handle_accept(const _State_type& __state, _Submatch* __captures);
+      _M_handle_accept(const _State_type& __state,
+		       _Submatch* __captures) __attribute__((noinline));
 
       bool
-      _M_nonreentrant_repeat(_StateIdT, _StateIdT, _Submatch* __captures);
+      _M_nonreentrant_repeat(_StateIdT, _StateIdT,
+			     _Submatch* __captures) __attribute__((noinline));
 
     private:
       pair<_StateIdT, _BiIter>		_M_last_rep_visit;
