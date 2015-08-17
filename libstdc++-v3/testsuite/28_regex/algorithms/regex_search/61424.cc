@@ -73,11 +73,10 @@ test02()
   int i = 0;
   for (auto g : grammar)
   {
-    // TODO: Update to regex_*_debug after fixing POSIX BFS matcher.
     cmatch m;
-    VERIFY(regex_match("aaaa", m, regex("a*(a*)", g)));
+    VERIFY(regex_match_debug("aaaa", m, regex("a*(a*)", g)));
     VERIFY(sol[i] == m[1]);
-    VERIFY(regex_search("aaaa", m, regex("a*(a*)", g)));
+    VERIFY(regex_search_debug("aaaa", m, regex("a*(a*)", g)));
     VERIFY(sol[i] == m[1]);
     i++;
   }

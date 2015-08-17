@@ -245,7 +245,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { return __style == _Style::_Ecma; }
 
       bool
-      _M_handle_visit(_StateIdT __state_id)
+      _M_handle_visit(_StateIdT __state_id, _Submatch* __results)
       { return false; }
 
       bool
@@ -278,6 +278,85 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	friend class _Executor_mixin;
     };
 
+  template<typename _Bi_iter, typename _Traits, _Style __style>
+    class _Bfs_mixin;
+
+  template<typename _Bi_iter, typename _Traits>
+    class _Bfs_mixin<_Bi_iter, _Traits, _Style::_Ecma>
+    {
+      using _Submatch = sub_match<_Bi_iter>;
+
+    public:
+      _Bfs_mixin(size_t __size) : _M_visited_states(__size, false) { }
+
+      bool
+      _M_handle_visit(_StateIdT __state_id, _Submatch* __results)
+      {
+	if (_M_visited_states[__state_id])
+	  return true;
+	_M_visited_states[__state_id] = true;
+	return false;
+      }
+
+      void
+      _M_clear()
+      { std::fill(_M_visited_states.begin(), _M_visited_states.end(), false); }
+
+    private:
+      // Indicates which states are already visited.
+      vector<char> _M_visited_states;
+    };
+
+  template<typename _Bi_iter, typename _TraitsT, _Style __style>
+    class _Bfs_executor;
+
+  template<typename _Bi_iter, typename _Traits>
+    class _Bfs_mixin<_Bi_iter, _Traits, _Style::_Posix>
+    {
+      using _Submatch = sub_match<_Bi_iter>;
+
+    public:
+      _Bfs_mixin(size_t __size) : _M_visited_states(__size, nullptr) { }
+
+      bool
+      _M_handle_visit(_StateIdT __state_id, _Submatch* __results)
+      {
+	if (_M_visited_states[__state_id]
+	    && !_M_leftmost_longest(__results, _M_visited_states[__state_id],
+				    _M_this()->_M_sub_count()))
+	  return true;
+	_M_visited_states[__state_id] = __results;
+	return false;
+      }
+
+      void
+      _M_clear()
+      {
+	std::fill(_M_visited_states.begin(), _M_visited_states.end(), nullptr);
+      }
+
+    private:
+      bool
+      _M_half_matched(_Bi_iter __position)
+      {
+	return _M_this()->_M_begin <= __position
+	    && __position < _M_this()->_M_end;
+      }
+
+      bool
+      _M_leftmost_longest(const _Submatch* __lhs, const _Submatch* __rhs,
+			  size_t __size);
+
+      _Bfs_executor<_Bi_iter, _Traits, _Style::_Posix>*
+      _M_this()
+      {
+	return static_cast<
+	    _Bfs_executor<_Bi_iter, _Traits, _Style::_Posix>*>(this);
+      }
+
+      vector<const _Submatch*> _M_visited_states;
+    };
+
   /**
    * @brief Takes a regex and an input string and applies Thompson NFA
    * algorithm.
@@ -286,7 +365,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     class _Bfs_executor
     : private _Context<_Bi_iter, _TraitsT>,
       private _Executor_mixin<_Bi_iter, _Bfs_executor<_Bi_iter, _TraitsT,
-						      __style>>
+						      __style>>,
+      private _Bfs_mixin<_Bi_iter, _TraitsT, __style>
     {
       using _Context_type = _Context<_Bi_iter, _TraitsT>;
       using _State_type =
@@ -299,7 +379,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		    regex_constants::match_flag_type __flags,
 		    _Search_mode __search_mode, _Submatch* __results)
       : _Context_type(__begin, __end, __nfa, __flags, __search_mode),
-      _M_results(__results), _M_visited_states(new bool[this->_M_nfa.size()])
+      _Bfs_mixin<_Bi_iter, _TraitsT, __style>(this->_M_nfa.size()),
+      _M_results(__results)
       { }
 
       // __search_mode should be the same as this->_M_search_mode. It's
@@ -324,18 +405,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       constexpr bool
       _M_is_ecma() const
       { return __style == _Style::_Ecma; }
-
-      bool
-      _M_handle_visit(_StateIdT __state_id)
-      {
-	// TODO: This is wrong for POSIX. If we already visited the state,
-	// we may want to again do _M_dfs in this state, since POSIX uses
-	// a leftmost longest algorithm for picking the final result.
-	if (_M_visited_states[__state_id])
-	  return true;
-	_M_visited_states[__state_id] = true;
-	return false;
-      }
 
       bool
       _M_handle_subexpr_begin(const _State_type& __state,
@@ -371,11 +440,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _Submatch*      				_M_results;
       // Saves states that need to be considered for the next character.
       vector<pair<_StateIdT, vector<_Submatch>>>	_M_match_queue;
-      // Indicates which states are already visited.
-      unique_ptr<bool[]>			_M_visited_states;
 
       template<typename _Bp, typename _Ep>
 	friend class _Executor_mixin;
+      template<typename, typename, _Style>
+	friend class _Bfs_mixin;
     };
 
  //@} regex-detail

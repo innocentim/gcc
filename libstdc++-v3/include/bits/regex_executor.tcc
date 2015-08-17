@@ -87,7 +87,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     bool _Executor_mixin<_Bi_iter, _Executor_type>::
     _M_dfs(_StateIdT __state_id, _Submatch* __captures)
     {
-      if (_M_this()->_M_handle_visit(__state_id))
+      if (_M_this()->_M_handle_visit(__state_id, __captures))
 	return false;
 
       const auto& __state = _M_this()->_M_nfa[__state_id];
@@ -401,6 +401,37 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __has_sol;
     }
 
+  template<typename _Bi_iter, typename _Traits>
+    bool _Bfs_mixin<_Bi_iter, _Traits, _Style::_Posix>::
+    _M_leftmost_longest(const _Submatch* __lhs, const _Submatch* __rhs,
+			size_t __size)
+    {
+      for (size_t __i = 0; __i < __size; __i++, __lhs++, __rhs++)
+	{
+	  bool __lhs_half_matched = _M_half_matched(__lhs->first);
+	  bool __rhs_half_matched = _M_half_matched(__rhs->first);
+	  if (__lhs_half_matched && !__rhs_half_matched)
+	    return true;
+	  if (!__lhs_half_matched && __rhs_half_matched)
+	    return false;
+	  if (__lhs_half_matched && __rhs_half_matched)
+	    {
+	      if (__lhs->first < __rhs->first)
+		return true;
+	      if (__lhs->first > __rhs->first)
+		return false;
+	      if (__lhs->matched && __rhs->matched)
+		{
+		  if (__lhs->second > __rhs->second)
+		    return true;
+		  if (__lhs->second < __rhs->second)
+		    return false;
+		}
+	    }
+	}
+      return false;
+    }
+
   // ------------------------------------------------------------
   //
   // BFS mode:
@@ -435,7 +466,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       while (!__old_queue.empty())
 	{
 	  bool __has_sol = false;
-	  std::fill_n(_M_visited_states.get(), this->_M_nfa.size(), false);
+	  this->_M_clear();
 	  for (auto& __task : __old_queue)
 	    if (this->_M_dfs(__task.first, __task.second.data()))
 	      {
