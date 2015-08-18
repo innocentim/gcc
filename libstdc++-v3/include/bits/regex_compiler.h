@@ -127,6 +127,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 			   _BracketMatcher<_TraitsT, __icase, __collate>&
 			   __matcher);
 
+      void
+      _M_insert_quantifier(long __min_rep, bool __infi, long __rest,
+			   bool __neg);
+
       int
       _M_cur_int_value(int __radix);
 

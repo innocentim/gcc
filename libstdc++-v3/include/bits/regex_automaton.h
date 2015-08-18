@@ -252,9 +252,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _StateIdT
       _M_insert_alt(_StateIdT __next, _StateIdT __alt, bool __neg)
       {
+	if (__neg)
+	  std::swap(__next, __alt);
 	_StateT __tmp(_S_opcode_alternative);
-	// It labels every quantifier to make greedy comparison easier in BFS
-	// approach.
 	__tmp._M_next = __next;
 	__tmp._M_alt = __alt;
 	return _M_insert_state(std::move(__tmp));

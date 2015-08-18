@@ -181,46 +181,24 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _Compiler<_TraitsT>::
     _M_quantifier()
     {
-      if (_M_stack.empty())
-	__throw_regex_error(regex_constants::error_badrepeat,
-			    "Nothing to repeat before a quantifier.");
+      __glibcxx_assert(!_M_stack.empty());
       if (_M_match_token(_ScannerT::_S_token_closure0))
 	{
-	  auto __e = _M_pop();
-	  _StateSeqT __r(*_M_nfa,
-			 _M_nfa->_M_insert_repeat(_S_invalid_state_id,
-						  __e._M_start, _M_try_opt()));
-	  __e._M_append(__r);
-	  _M_stack.push(__r);
+	  _M_insert_quantifier(0, true, 0, _M_try_opt());
 	}
       else if (_M_match_token(_ScannerT::_S_token_closure1))
 	{
-	  auto __e = _M_pop();
-	  __e._M_append(_M_nfa->_M_insert_repeat(_S_invalid_state_id,
-						 __e._M_start, _M_try_opt()));
-	  _M_stack.push(__e);
+	  _M_insert_quantifier(1, true, 0, _M_try_opt());
 	}
       else if (_M_match_token(_ScannerT::_S_token_opt))
 	{
-	  auto __e = _M_pop();
-	  auto __end = _M_nfa->_M_insert_dummy();
-	  _StateSeqT __r(*_M_nfa,
-			 _M_nfa->_M_insert_repeat(_S_invalid_state_id,
-						  __e._M_start, _M_try_opt()));
-	  __e._M_append(__end);
-	  __r._M_append(__end);
-	  _M_stack.push(__r);
+	  _M_insert_quantifier(0, false, 1, _M_try_opt());
 	}
       else if (_M_match_token(_ScannerT::_S_token_interval_begin))
 	{
-	  if (_M_stack.empty())
-	    __throw_regex_error(regex_constants::error_badrepeat,
-				"Nothing to repeat before a quantifier.");
 	  if (!_M_match_token(_ScannerT::_S_token_dup_count))
 	    __throw_regex_error(regex_constants::error_badbrace,
 				"Unexpected token in brace expression.");
-	  _StateSeqT __r(_M_pop());
-	  _StateSeqT __e(*_M_nfa, _M_nfa->_M_insert_dummy());
 	  long __min_rep = _M_cur_int_value(10);
 	  bool __infi = false;
 	  long __n;
@@ -237,51 +215,57 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    __throw_regex_error(regex_constants::error_brace,
 				"Unexpected end of brace expression.");
 
-	  auto __neg = _M_try_opt();
-
-	  for (long __i = 0; __i < __min_rep; ++__i)
-	    __e._M_append(__r._M_clone());
-
-	  if (__infi)
-	    {
-	      auto __tmp = __r._M_clone();
-	      _StateSeqT __s(*_M_nfa,
-			     _M_nfa->_M_insert_repeat(_S_invalid_state_id,
-						      __tmp._M_start, __neg));
-	      __tmp._M_append(__s);
-	      __e._M_append(__s);
-	    }
-	  else
-	    {
-	      if (__n < 0)
-		__throw_regex_error(regex_constants::error_badbrace,
-				    "Invalid range in brace expression.");
-	      auto __end = _M_nfa->_M_insert_dummy();
-	      // _M_alt is the "match more" branch, and _M_next is the
-	      // "match less" one. Switch _M_alt and _M_next of all created
-	      // nodes. This is a hack but IMO works well.
-	      std::stack<_StateIdT> __stack;
-	      for (long __i = 0; __i < __n; ++__i)
-		{
-		  auto __tmp = __r._M_clone();
-		  auto __alt = _M_nfa->_M_insert_repeat(__tmp._M_start,
-							__end, __neg);
-		  __stack.push(__alt);
-		  __e._M_append(_StateSeqT(*_M_nfa, __alt, __tmp._M_end));
-		}
-	      __e._M_append(__end);
-	      while (!__stack.empty())
-		{
-		  auto& __tmp = (*_M_nfa)[__stack.top()];
-		  __stack.pop();
-		  std::swap(__tmp._M_next, __tmp._M_alt);
-		}
-	    }
-	  _M_stack.push(__e);
+	  _M_insert_quantifier(__min_rep, __infi, __n, _M_try_opt());
 	}
       else
 	return false;
       return true;
+    }
+
+  template<typename _TraitsT>
+    void _Compiler<_TraitsT>::
+    _M_insert_quantifier(long __min_rep, bool __infi, long __rest, bool __neg)
+    {
+      _StateSeqT __r(_M_pop());
+      _StateSeqT __e(*_M_nfa, _M_nfa->_M_insert_dummy());
+
+      if (__infi)
+	{
+	  for (long __i = 0; __i < __min_rep; ++__i)
+	    __e._M_append(__r._M_clone());
+	  _StateSeqT __s(*_M_nfa,
+			 _M_nfa->_M_insert_repeat(_S_invalid_state_id,
+						  __r._M_start, __neg));
+	  __r._M_append(__s);
+	  __e._M_append(__s);
+	}
+      else if (__rest > 0)
+	{
+	  for (long __i = 0; __i < __min_rep; ++__i)
+	    __e._M_append(__r._M_clone());
+	  auto __end = _M_nfa->_M_insert_dummy();
+	  for (long __i = 0; __i < __rest; ++__i)
+	    {
+	      auto __tmp = __i + 1 == __rest ? __r : __r._M_clone();
+	      __e._M_append(
+		_StateSeqT(
+		  *_M_nfa,
+		  _M_nfa->_M_insert_alt(__end, __tmp._M_start, __neg),
+		  __tmp._M_end));
+	    }
+	  __e._M_append(__end);
+	}
+      else if (__rest == 0)
+	{
+	  for (long __i = 0; __i < __min_rep; ++__i)
+	    __e._M_append(__i + 1 == __min_rep ? __r :__r._M_clone());
+	}
+      else
+	{
+	  __throw_regex_error(regex_constants::error_badbrace,
+			      "Invalid range in brace expression.");
+	}
+      _M_stack.push(__e);
     }
 
 #define __INSERT_REGEX_MATCHER(__func, args...)\
