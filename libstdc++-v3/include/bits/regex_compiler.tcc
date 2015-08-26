@@ -569,7 +569,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _TraitsT, bool __icase, bool __collate>
     bool
     _BracketMatcher<_TraitsT, __icase, __collate>::
-    _M_apply(_CharT __ch, false_type) const
+    _M_apply(_CharT __ch) const
     {
       bool __ret = std::binary_search(_M_char_set.begin(), _M_char_set.end(),
 				      _M_translator._M_translate(__ch));
