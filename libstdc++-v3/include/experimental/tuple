@@ -71,6 +71,47 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 			  _Indices{});
     }
 
+  template<typename...>
+    class variant;
+
+  static constexpr const size_t tuple_not_found = (size_t)-1;
+
+  template<typename _Tp, typename _Up>
+    struct tuple_find;
+
+  template<typename _Tp, typename _Up>
+    struct tuple_find<_Tp, const _Up>
+    : public tuple_find<_Tp, _Up> { };
+
+  template<typename _Tp, typename _Up>
+    struct tuple_find<_Tp, volatile _Up>
+    : public tuple_find<_Tp, _Up> { };
+
+  template<typename _Tp, typename _Up>
+    struct tuple_find<_Tp, const volatile _Up>
+    : public tuple_find<_Tp, _Up> { };
+
+  template<typename _Tp, typename _U1, typename _U2>
+    struct tuple_find<_Tp, pair<_U1, _U2>>
+      : public tuple_find<_Tp, tuple<_U1, _U2>> { };
+
+  template<typename _Tp, typename... _Types>
+    struct tuple_find<_Tp, variant<_Types...>>
+      : public tuple_find<_Tp, tuple<_Types...>> { };
+
+  template<typename _Tp, typename... _Types>
+    struct tuple_find<_Tp, tuple<_Types...>>
+    : integral_constant<size_t, tuple_not_found> { };
+
+  template<typename _Tp, typename _Up, typename... _Types>
+    struct tuple_find<_Tp, tuple<_Up, _Types...>>
+    : integral_constant<size_t,
+	is_same<_Tp, _Up>::value
+	? 0
+	: (tuple_find<_Tp, tuple<_Types...>>() == tuple_not_found
+	   ? tuple_not_found
+	   : tuple_find<_Tp, tuple<_Types...>>() + 1)> { };
+
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace fundamentals_v1
 } // namespace experimental
