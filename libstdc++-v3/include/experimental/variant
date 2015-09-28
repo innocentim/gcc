@@ -1,3 +1,4 @@
+#include <bits/enable_special_members.h>
 #include <experimental/tuple>
 #include <experimental/type_traits>
 #include <algorithm>
@@ -8,41 +9,47 @@ namespace experimental
 {
 inline namespace fundamentals_v1
 {
-  template<typename _Tp>
-    void
-    __copy_ctor(void* __lhs, const void* __rhs)
-    { new (__lhs) _Tp(*static_cast<const _Tp*>(__rhs)); }
+  template<typename... _Types>
+    class variant;
 
   template<typename _Tp>
-    void
-    __copy_assign(void* __lhs, const void* __rhs)
-    { *static_cast<_Tp*>(__lhs) = *static_cast<const _Tp*>(__rhs); }
+    using _Normalized_alternative = conditional_t<is_reference_v<_Tp>, reference_wrapper<remove_reference_t<_Tp>>, _Tp>;
 
   template<typename _Tp>
-    void
-    __move_ctor(void* __lhs, void* __rhs)
-    { new (__lhs) _Tp(std::move(*static_cast<_Tp*>(__rhs))); }
+    constexpr void
+    __erased_copy_ctor(void* __lhs, const void* __rhs)
+    { new (__lhs) _Tp(*static_cast<const _Normalized_alternative<_Tp>*>(__rhs)); }
 
   template<typename _Tp>
-    void
-    __move_assign(void* __lhs, void* __rhs)
-    { *static_cast<_Tp*>(__lhs) = std::move(*static_cast<_Tp*>(__rhs)); }
+    constexpr void
+    __erased_copy_assign(void* __lhs, const void* __rhs)
+    { *static_cast<_Tp*>(__lhs) = *static_cast<const _Normalized_alternative<_Tp>*>(__rhs); }
 
   template<typename _Tp>
-    void
-    __swap_fn(void* __lhs, void* __rhs)
-    { swap(*static_cast<_Tp*>(__lhs), *static_cast<_Tp*>(__rhs)); }
+    constexpr void
+    __erased_move_ctor(void* __lhs, void* __rhs)
+    { new (__lhs) _Tp(std::move(*static_cast<_Normalized_alternative<_Tp>*>(__rhs))); }
 
   template<typename _Tp>
-    void
-    __dtor(void* __p)
-    { static_cast<_Tp*>(__p)->~_Tp(); }
+    constexpr void
+    __erased_move_assign(void* __lhs, void* __rhs)
+    { *static_cast<_Tp*>(__lhs) = std::move(*static_cast<_Normalized_alternative<_Tp>*>(__rhs)); }
 
-  template<bool __should_delete>
-    constexpr void __delete_if() { }
+  template<typename _Tp>
+    constexpr void
+    __erased_swap(void* __lhs, void* __rhs)
+    {
+      using std::swap;
+      swap(*static_cast<_Tp*>(__lhs), *static_cast<_Normalized_alternative<_Tp>*>(__rhs));
+    }
 
-  template<>
-    constexpr void __delete_if<true>() = delete;
+  template<typename _Tp>
+    constexpr void
+    __erased_dtor(void* __p)
+    {
+      using _Underlying = _Normalized_alternative<_Tp>;
+      static_cast<_Underlying*>(__p)->~_Underlying();
+    }
 
   template<typename... _Types>
     struct __has_duplicated_helper
@@ -50,7 +57,7 @@ inline namespace fundamentals_v1
 
   template<typename _Tp, typename... _Rest>
     struct __has_duplicated_helper<_Tp, _Rest...>
-    { static constexpr bool value = tuple_find<_Tp, tuple<_Rest...>>::value != tuple_not_found || __has_duplicated_helper<_Rest...>::value; };
+    { static constexpr bool value = tuple_find<_Tp, variant<_Rest...>>::value != tuple_not_found || __has_duplicated_helper<_Rest...>::value; };
 
   template<typename _Tp>
     struct emplaced_type_t { };
@@ -65,91 +72,183 @@ inline namespace fundamentals_v1
     constexpr emplaced_index_t<_Np> emplaced_index;
 
   template<typename... _Types>
-    class variant
+    struct _Variant_base
     {
+      constexpr
+      _Variant_base() noexcept(is_nothrow_default_constructible_v<tuple_element_t<0, variant<_Types...>>>)
+      : _M_index(0)
+      { new (_M_get_storage()) tuple_element_t<0, variant<_Types...>>(); }
+
+      _Variant_base(const _Variant_base& __rhs) : _M_index(__rhs._M_index)
+      {
+	__glibcxx_assert(__rhs._M_valid());
+	static constexpr void (*_S_copy_ctors[])(void*, const void*) =
+	  { &__erased_copy_ctor<_Types>...  };
+	_S_copy_ctors[__rhs._M_index](_M_get_storage(), __rhs._M_get_storage());
+      }
+
+      _Variant_base(_Variant_base&& __rhs)
+      noexcept(__and_<is_nothrow_move_constructible<_Types>...>::value)
+      : _M_index(__rhs._M_index)
+      {
+	__glibcxx_assert(__rhs._M_valid());
+	static constexpr void (*_S_move_ctors[])(void*, void*) =
+	  { &__erased_move_ctor<_Types>... };
+	_S_move_ctors[__rhs._M_index](_M_get_storage(), __rhs._M_get_storage());
+      }
+
+      template<size_t _Np, typename... _Args>
+	constexpr explicit
+	_Variant_base(emplaced_index_t<_Np>, _Args&&... __args) : _M_index(_Np)
+	{ new (this->_M_get_storage()) _Normalized_alternative<tuple_element_t<_Np, variant<_Types...>>>(std::forward<_Args>(__args)...); }
+
+      ~_Variant_base()
+      {
+	if (_M_valid())
+	  {
+	    static constexpr void (*_S_dtors[])(void*) =
+	      { &__erased_dtor<_Types>...  };
+	    _S_dtors[_M_index](this->_M_get_storage());
+	    _M_index = tuple_not_found;
+	  }
+      }
+
+      _Variant_base&
+      operator=(const _Variant_base& __rhs)
+      {
+	__glibcxx_assert(__rhs._M_valid());
+	if (_M_index == __rhs._M_index)
+	  {
+	    static constexpr void (*_S_copy_assigns[])(void*, const void*) =
+	      { &__erased_copy_assign<_Types>...  };
+	    _S_copy_assigns[_M_index](_M_get_storage(), __rhs._M_get_storage());
+	  }
+	else
+	  {
+	    _Variant_base __tmp(__rhs);
+	    this->~_Variant_base();
+	    new (this) _Variant_base(std::move(__tmp));
+	  }
+	__glibcxx_assert(_M_index == __rhs._M_index);
+	return *this;
+      }
+
+      _Variant_base&
+      operator=(_Variant_base&& __rhs) noexcept(__and_<is_nothrow_move_assignable<_Types>..., is_nothrow_move_constructible<_Types>...>::value)
+      {
+	if (_M_index == __rhs._M_index)
+	  {
+	    static constexpr void (*_S_move_assigns[])(void*, void*) =
+	      { &__erased_move_assign<_Types>...  };
+	    _S_move_assigns[_M_index](_M_get_storage(), __rhs._M_get_storage());
+	  }
+	else
+	  {
+	    this->~_Variant_base();
+	    new (this) _Variant_base(std::move(__rhs));
+	  }
+	__glibcxx_assert(__rhs._M_valid());
+	return *this;
+      }
+
+      constexpr const void*
+      _M_get_storage() const
+      { return static_cast<const void*>(_M_storage); }
+
+      constexpr void*
+      _M_get_storage()
+      { return static_cast<void*>(_M_storage); }
+
+      bool
+      _M_valid() const noexcept
+      { return this->_M_index < sizeof...(_Types); }
+
+      void
+      _M_swap(_Variant_base& __rhs) noexcept(/*TODO*/__and_<is_nothrow_move_constructible<_Types>...>::value)
+      {
+	if (_M_index == __rhs._M_index)
+	  {
+	    static constexpr void (*_S_swaps[])(void*, void*) =
+	      { &__erased_swap<_Types>... };
+	    _S_swaps[_M_index](_M_get_storage(), __rhs._M_get_storage());
+	  }
+	else
+	  {
+	    std::swap(*this, __rhs);
+	  }
+      }
+
+      size_t _M_index;
+      char _M_storage[std::max({sizeof(_Normalized_alternative<_Types>)...})];
+    };
+
+  template<typename... _Types>
+    class variant
+    : private _Variant_base<_Types...>,
+      private _Enable_default_constructor<is_default_constructible_v<tuple_element_t<0, variant<_Types...>>>, variant<_Types...>>,
+      private _Enable_copy_move<
+	  __and_<is_copy_constructible<_Types>...>::value,
+	  __and_<is_move_constructible<_Types>...>::value,
+	  __and_<is_copy_constructible<_Types>..., is_copy_assignable<_Types>...>::value,
+	  __and_<is_move_constructible<_Types>..., is_move_assignable<_Types>...>::value,
+	  variant<_Types...>>
+    {
+      using _Base_type = _Variant_base<_Types...>;
+
       static_assert(__and_<is_destructible<_Types>...>::value, "All types in variant are destructible.");
 
-      using _Type_tuple = tuple<_Types...>;
-
-      static constexpr void (*_S_copy_ctors[])(void*, const void*) =
-      { &__copy_ctor<_Types>...  };
-
-      static constexpr void (*_S_copy_assigns[])(void*, const void*) =
-      { &__copy_assign<_Types>...  };
-
-      static constexpr void (*_S_move_ctors[])(void*, void*) =
-      { &__move_ctor<_Types>...  };
-
-      static constexpr void (*_S_move_assigns[])(void*, void*) =
-      { &__move_assign<_Types>...  };
-
-      static constexpr void (*_S_swaps[])(void*, void*) =
-      { &__swap_fn<_Types>...  };
-
-      static constexpr void (*_S_dtors[])(void*) =
-      { &__dtor<_Types>...  };
-
       template<typename _Tp>
-	static constexpr bool _S_is_alternative = tuple_find<_Tp, _Type_tuple>::value != tuple_not_found;
-
-      template<typename _Tp>
-	static constexpr size_t
-	_S_select(_Tp&&)
-	{ return tuple_find<_Tp, _Type_tuple>::value; }
+	static constexpr bool _S_is_alternative = tuple_find<_Tp, variant>::value != tuple_not_found;
 
     public:
       constexpr
-      variant() noexcept(is_nothrow_default_constructible_v<tuple_element_t<0, _Type_tuple>>)
-      : variant(emplaced_type<tuple_element_t<0, _Type_tuple>>)
-      { __delete_if<!is_default_constructible_v<tuple_element_t<0, _Type_tuple>>>(); }
+      variant() noexcept(is_nothrow_default_constructible_v<tuple_element_t<0, variant>>) = default;
 
-      template<typename = enable_if_t<__and_<is_copy_constructible<_Types>...>::value>>
-	variant(const variant& __rhs) : _M_index(__rhs._M_index)
-	{
-	  __glibcxx_assert(__rhs.valid());
-	  _S_copy_ctors[__rhs.index()](_M_get_storage(), __rhs._M_get_storage());
-	}
+      variant(const variant& __rhs) = default;
 
-      template<typename = enable_if_t<__and_<is_move_constructible<_Types>...>::value>>
-	variant(variant&& __rhs)
-	noexcept(__and_<is_nothrow_move_constructible<_Types...>>::value)
-	: _M_index(__rhs._M_index)
-	{
-	  __glibcxx_assert(__rhs.valid());
-	  _S_move_ctors[__rhs.index()](_M_get_storage(), __rhs._M_get_storage());
-	}
+      variant(variant&& __rhs) = default;
 
-      template<typename _Tp, typename = enable_if_t<is_copy_constructible_v<_Tp> && _S_is_alternative<_Tp>>>
+      variant&
+      operator=(const variant& __rhs) = default;
+
+      variant&
+      operator=(variant&& __rhs) noexcept(__and_<is_nothrow_move_assignable<_Types>..., is_nothrow_move_constructible<_Types>...>::value) = default;
+
+      template<typename _Tp, typename = enable_if_t<_S_is_alternative<_Tp>>>
 	constexpr
 	variant(const _Tp& __v) : variant(emplaced_type<_Tp>, __v)
-	{ }
+	{ static_assert(is_copy_constructible_v<_Tp>, ""); }
 
-      template<typename _Tp, typename = enable_if_t<is_move_constructible_v<_Tp> && _S_is_alternative<_Tp>>>
+      template<typename _Tp, typename = enable_if_t<_S_is_alternative<_Tp>>>
 	constexpr
 	variant(_Tp&& __v) : variant(emplaced_type<_Tp>, std::forward<_Tp>(__v))
-	{ }
+	{ static_assert(is_move_constructible_v<_Tp>, ""); }
 
-      template<typename _Tp, typename... _Args, typename = enable_if_t<is_constructible_v<_Tp, _Args&&...> && _S_is_alternative<_Tp>>>
+      template<typename _Tp, typename... _Args>
 	constexpr explicit
-	variant(emplaced_type_t<_Tp>, _Args&&... __args) : variant(emplaced_index<tuple_find<_Tp, _Type_tuple>::value>, std::forward<_Args>(__args)...)
+	variant(emplaced_type_t<_Tp>, _Args&&... __args) : variant(emplaced_index<tuple_find<_Tp, variant>::value>, std::forward<_Args>(__args)...)
 	{
-	  __delete_if<__has_duplicated_helper<_Types...>::value>();
+	  static_assert(is_constructible_v<_Tp, _Args&&...> && _S_is_alternative<_Tp>, "");
+	  static_assert(!__has_duplicated_helper<_Types...>::value, "");
 	  __glibcxx_assert(holds_alternative<_Tp>(*this));
 	}
 
-      template<typename _Tp, typename _Up, typename... _Args, typename = enable_if_t<is_constructible_v<_Tp, initializer_list<_Up>&, _Args&&...> && _S_is_alternative<_Tp>>>
+      template<typename _Tp, typename _Up, typename... _Args, typename = enable_if_t<is_constructible_v<_Tp, initializer_list<_Up>&, _Args&&...>, void>>
 	constexpr explicit
 	variant(emplaced_type_t<_Tp>, initializer_list<_Up> __il, _Args&&... __args) : variant(emplaced_type<_Tp>, __il, std::forward<_Args>(__args)...)
-	{ }
+	{ static_assert(_S_is_alternative<_Tp>, ""); }
 
-      template<size_t _Np, typename... _Args, typename = enable_if_t<is_constructible_v<tuple_element_t<_Np, _Type_tuple>, _Args&&...> && (_Np < sizeof...(_Types))>>
+      template<size_t _Np, typename... _Args>
 	constexpr explicit
-	variant(emplaced_index_t<_Np>, _Args&&... __args) : _M_index(_Np)
-	{ new (_M_get_storage()) tuple_element_t<_Np, _Type_tuple>(std::forward<_Args>(__args)...); }
+	variant(emplaced_index_t<_Np>, _Args&&... __args) : _Base_type(emplaced_index<_Np>, std::forward<_Args>(__args)...)
+	{
+	  static_assert(is_constructible_v<tuple_element_t<_Np, variant>, _Args&&...>, "");
+	  static_assert(_Np < sizeof...(_Types), "");
+	}
 
-      template<size_t _Np, typename _Up, typename... _Args>
+      template<size_t _Np, typename _Up, typename... _Args, typename = enable_if_t<is_constructible_v<tuple_element_t<_Np, variant>, initializer_list<_Up>&, _Args&&...>>>
 	constexpr explicit
-	variant(emplaced_index_t<_Np>, initializer_list<_Up> __il, _Args&&... __args) : variant(emplaced_type<tuple_element_t<_Np, _Type_tuple>>, __il, std::forward<_Args>(__args)...)
+	variant(emplaced_index_t<_Np>, initializer_list<_Up> __il, _Args&&... __args) : variant(emplaced_type<tuple_element_t<_Np, variant>>, __il, std::forward<_Args>(__args)...)
 	{ }
 
       // TODO allocator-extended constructors
@@ -165,55 +264,13 @@ inline namespace fundamentals_v1
       template<typename _Alloc>
 	variant(allocator_arg_t, const _Alloc& __alloc, variant&& __v);
 
-      ~variant()
-      {
-	if (valid())
-	  {
-	    _S_dtors[index()](_M_get_storage());
-	    _M_index = tuple_not_found;
-	  }
-      }
-
-      enable_if_t<__and_<is_copy_constructible<_Types>..., is_copy_assignable<_Types>...>::value, variant&>
-      operator=(const variant& __rhs)
-      {
-	__glibcxx_assert(__rhs.valid());
-	if (index() == __rhs.index())
-	  {
-	    _S_copy_assigns[index()](_M_storage(), __rhs._M_storage());
-	  }
-	else
-	  {
-	    variant __tmp(__rhs);
-	    ~variant();
-	    new (this) variant(std::move(__tmp));
-	  }
-	__glibcxx_assert(index() == __rhs.index());
-	return *this;
-      }
-
-      enable_if_t<__and_<is_move_constructible<_Types>..., is_move_assignable<_Types>...>::value, variant&>
-      operator=(variant&& __rhs) noexcept(__and_<is_nothrow_move_assignable<_Types>..., is_nothrow_move_constructible<_Types>...>::value)
-      {
-	if (index() == __rhs.index())
-	  {
-	    _S_move_assigns[index()](_M_storage(), __rhs._M_storage());
-	  }
-	else
-	  {
-	    ~variant();
-	    new (this) variant(std::move(__rhs));
-	  }
-	__glibcxx_assert(__rhs.valid());
-	return *this;
-      }
-
       template<typename _Tp>
-	variant&
+	enable_if_t<_S_is_alternative<_Tp>, variant&>
 	operator=(const _Tp& __rhs)
 	{
-	  constexpr auto __expected_index = _S_select(__rhs);
-	  using _Expected_type = tuple_element_t<__expected_index, _Type_tuple>;
+	  constexpr size_t __expected_index = tuple_find<remove_reference_t<_Tp>, variant>::value;
+	  static_assert(__expected_index != tuple_not_found, "");
+	  using _Expected_type = tuple_element_t<__expected_index, variant>;
 	  if (index() == __expected_index)
 	    {
 	      get<__expected_index>(*this) = __rhs;
@@ -221,36 +278,37 @@ inline namespace fundamentals_v1
 	  else
 	    {
 	      _Expected_type __tmp(__rhs);
-	      ~variant();
+	      this->~variant();
 	      new (this) variant(emplaced_index<__expected_index>, std::move(__tmp));
 	    }
 	  return *this;
 	}
 
       template<typename _Tp>
-	variant&
+	enable_if_t<_S_is_alternative<_Tp>, variant&>
 	operator=(_Tp&& __rhs) noexcept(__and_<is_nothrow_move_assignable<_Types>..., is_nothrow_move_constructible<_Types>...>::value)
 	{
-	  constexpr auto __expected_index = _S_select(__rhs);
-	  using __expected_type = tuple_element_t<__expected_index, _Type_tuple>;
+	  constexpr size_t __expected_index = tuple_find<remove_reference_t<_Tp>, variant>::value;
+	  static_assert(__expected_index != tuple_not_found, "");
 	  if (index() == __expected_index)
 	    {
 	      get<__expected_index>(*this) = std::move(__rhs);
 	    }
 	  else
 	    {
-	      ~variant();
+	      this->~variant();
 	      new (this) variant(emplaced_index<__expected_index>, std::move(__rhs));
 	    }
 	  return *this;
 	}
 
       template<typename _Tp, typename... _Args>
-	enable_if_t<is_constructible_v<_Tp, _Args&&...>, void>
+	void
 	emplace(_Args&&... __args)
 	{
-	  __delete_if<__has_duplicated_helper<_Types...>::value>();
-	  emplace<tuple_find<_Tp, _Type_tuple>::value>(std::forward<_Args>(__args)...);
+	  static_assert(is_constructible_v<_Tp, _Args&&...>, "");
+	  static_assert(!__has_duplicated_helper<_Types...>::value, "");
+	  emplace<tuple_find<_Tp, variant>::value>(std::forward<_Args>(__args)...);
 	  __glibcxx_assert(holds_alternative<_Tp>(*this));
 	}
 
@@ -260,75 +318,50 @@ inline namespace fundamentals_v1
 	{ emplace(__il, std::forward<_Args>(__args)...); }
 
       template<size_t _Np, typename... _Args>
-	enable_if_t<is_constructible_v<tuple_element_t<_Np, _Type_tuple>, _Args&&...>, void>
+	void
 	emplace(_Args&&... __args)
 	{
-	  ~variant();
+	  static_assert(is_constructible_v<tuple_element_t<_Np, variant>, _Args&&...>, "");
+	  this->~variant();
 	  new (this) variant(emplaced_index<_Np>, std::forward<_Args>(__args)...);
 	  __glibcxx_assert(index() == _Np);
 	}
 
       template<size_t _Np, typename _Up, typename... _Args>
-	enable_if_t<is_constructible_v<tuple_element_t<_Np, _Type_tuple>, initializer_list<_Up>&, _Args&&...>, void>
+	enable_if_t<is_constructible_v<tuple_element_t<_Np, variant>, initializer_list<_Up>&, _Args&&...>, void>
 	emplace(initializer_list<_Up> __il, _Args&&... __args)
 	{ emplace<_Np>(__il, std::forward<_Args>(__args)...); }
 
       bool
       valid() const noexcept
-      { return _M_index < sizeof...(_Types); }
+      { return this->_M_valid(); }
 
       size_t index() const noexcept
-      { return _M_index; }
+      { return this->_M_index; }
 
-      enable_if_t<__and_<is_move_constructible<_Types>...>::value, void>
-      swap(variant& __rhs) noexcept/*xxxx*/
+      void
+      swap(variant& __rhs) noexcept(/*TODO*/__and_<is_nothrow_move_constructible<_Types>...>::value)
       {
+	static_assert(__and_<is_move_constructible<_Types>...>::value, "");
 	__glibcxx_assert(valid() && __rhs.valid());
-	if (index() == __rhs.index())
-	  _S_swaps[index()](_M_get_storage(), __rhs._M_get_storage());
-	else
-	  swap(*this, __rhs);
+	return this->_M_swap(__rhs);
       }
 
     private:
       friend struct _Variant_friend;
-
-      constexpr const void*
-      _M_get_storage() const
-      { return reinterpret_cast<const void*>(_M_storage); }
-
-      constexpr void*
-      _M_get_storage()
-      { return reinterpret_cast<void*>(_M_storage); }
-
-      size_t _M_index;
-      char _M_storage[std::max({sizeof(_Types)...})];
     };
-
-  template<typename... _Types>
-    constexpr void (*variant<_Types...>::_S_copy_ctors[])(void*, const void*);
-  template<typename... _Types>
-    constexpr void (*variant<_Types...>::_S_copy_assigns[])(void*, const void*);
-  template<typename... _Types>
-    constexpr void (*variant<_Types...>::_S_move_ctors[])(void*, void*);
-  template<typename... _Types>
-    constexpr void (*variant<_Types...>::_S_move_assigns[])(void*, void*);
-  template<typename... _Types>
-    constexpr void (*variant<_Types...>::_S_swaps[])(void*, void*);
-  template<typename... _Types>
-    constexpr void (*variant<_Types...>::_S_dtors[])(void*);
 
   struct _Variant_friend
   {
     template<typename _Tp, typename... _Types>
-      static _Tp*
+      static _Normalized_alternative<_Tp>*
       _S_get_raw_storage(variant<_Types...>& __v)
-      { return reinterpret_cast<_Tp*>(__v._M_storage); }
+      { return static_cast<_Normalized_alternative<_Tp>*>(__v._M_get_storage()); }
 
     template<typename _Tp, typename... _Types>
-      static const _Tp*
+      static const _Normalized_alternative<_Tp>*
       _S_get_raw_storage(const variant<_Types...>& __v)
-      { return reinterpret_cast<const _Tp*>(__v._M_storage); }
+      { return static_cast<const _Normalized_alternative<_Tp>*>(__v._M_get_storage()); }
   };
 
   struct monostate { };
@@ -379,117 +412,203 @@ inline namespace fundamentals_v1
     bool
     holds_alternative(const variant<_Types...>& __v) noexcept
     {
-      __delete_if<__has_duplicated_helper<_Types...>::value>();
-      return __v.index() == tuple_find<_Tp, tuple<_Types...>>::value;
+      static_assert(!__has_duplicated_helper<_Types...>::value, "");
+      return __v.index() == tuple_find<_Tp, variant<_Types...>>::value;
     }
 
   template<typename _Tp, typename... _Types>
     remove_reference_t<_Tp>&
     get(variant<_Types...>& __v)
-    { return get<tuple_find<_Tp, tuple<_Types...>>::value>(__v); }
+    { return get<tuple_find<_Tp, variant<_Types...>>::value>(__v); }
 
   template<typename _Tp, typename... _Types>
     const remove_reference_t<_Tp>&
     get(const variant<_Types...>& __v)
-    { return get<tuple_find<_Tp, tuple<_Types...>>::value>(__v); }
+    { return get<tuple_find<_Tp, variant<_Types...>>::value>(__v); }
 
   template<typename _Tp, typename... _Types>
     _Tp&&
     get(variant<_Types...>&& __v)
-    { return get<tuple_find<_Tp, tuple<_Types...>>::value>(std::move(__v)); }
+    { return get<tuple_find<_Tp, variant<_Types...>>::value>(std::move(__v)); }
 
   template<size_t _Np, typename... _Types>
     remove_reference_t<tuple_element_t<_Np, variant<_Types...>>>&
     get(variant<_Types...>& __v)
     {
-      __delete_if<(_Np < sizeof...(_Types))>();
+      static_assert(_Np < sizeof...(_Types), "");
       __glibcxx_assert(__v.valid());
       if (__v.index() != _Np)
 	__throw_bad_variant_access("Attempt to access wrong variant value");
-      return *_Variant_friend::_S_get_raw_storage<tuple_element_t<_Np, tuple<_Types...>>*>(__v);
+      return *_Variant_friend::_S_get_raw_storage<tuple_element_t<_Np, variant<_Types...>>>(__v);
     }
 
   template<size_t _Np, typename... _Types>
     remove_reference_t<const tuple_element_t<_Np, variant<_Types...>>>&
     get(const variant<_Types...>& __v)
     {
-      __delete_if<(_Np < sizeof...(_Types))>();
+      static_assert(_Np < sizeof...(_Types), "");
       __glibcxx_assert(__v.valid());
       if (__v.index() != _Np)
 	__throw_bad_variant_access("Attempt to access wrong variant value");
-      return *_Variant_friend::_S_get_raw_storage<const tuple_element_t<_Np, tuple<_Types...>>*>(__v);
+      return *_Variant_friend::_S_get_raw_storage<const tuple_element_t<_Np, variant<_Types...>>>(__v);
     }
 
   template<size_t _Np, typename... _Types>
     tuple_element_t<_Np, variant<_Types...>>&&
     get(variant<_Types...>&& __v)
-    { std::forward<tuple_element_t<_Np, tuple<_Types...>>&&>(get<_Np>(__v)); }
+    { return std::forward<tuple_element_t<_Np, variant<_Types...>>&&>(get<_Np>(__v)); }
 
   template<typename _Tp, typename... _Types>
     remove_reference_t<_Tp>*
     get_if(variant<_Types...>* __vp)
-    { return get_if<tuple_find<_Tp, tuple<_Types...>>::value>(__vp); }
+    { return get_if<tuple_find<_Tp, variant<_Types...>>::value>(__vp); }
 
   template<typename _Tp, typename... _Types>
     const remove_reference_t<_Tp>*
     get_if(const variant<_Types...>* __vp)
-    { return get_if<tuple_find<_Tp, tuple<_Types...>>::value>(__vp); }
+    { return get_if<tuple_find<_Tp, variant<_Types...>>::value>(__vp); }
 
   template<size_t _Np, typename... _Types>
     remove_reference_t<tuple_element_t<_Np, variant<_Types...>>>*
     get_if(variant<_Types...>* __vp)
     {
-      __delete_if<(_Np < sizeof...(_Types))>();
+      static_assert(_Np < sizeof...(_Types), "");
       __glibcxx_assert(__v.valid());
       if (__vp == nullptr || __vp->index() != _Np)
 	return nullptr;
-      return _Variant_friend::_S_get_raw_storage<tuple_element_t<_Np, tuple<_Types...>>*>(*__vp);
+      return _Variant_friend::_S_get_raw_storage<tuple_element_t<_Np, variant<_Types...>>>(*__vp);
     }
 
   template<size_t _Np, typename... _Types>
     const remove_reference_t<tuple_element_t<_Np, variant<_Types...>>>*
     get_if(const variant<_Types...>* __vp)
     {
-      __delete_if<(_Np < sizeof...(_Types))>();
+      static_assert(_Np < sizeof...(_Types), "");
       __glibcxx_assert(__v.valid());
       if (__vp == nullptr || __vp->index() != _Np)
 	return nullptr;
-      return _Variant_friend::_S_get_raw_storage<const tuple_element_t<_Np, tuple<_Types...>>*>(*__vp);
+      return _Variant_friend::_S_get_raw_storage<const tuple_element_t<_Np, variant<_Types...>>>(*__vp);
+    }
+
+  template<typename _Tp>
+    constexpr bool
+    __erased_equal_to(const void* __lhs, const void* __rhs)
+    { return *static_cast<const _Normalized_alternative<_Tp>*>(__lhs) == *static_cast<const _Normalized_alternative<_Tp>*>(__rhs); }
+
+  template<typename _Tp>
+    constexpr bool
+    __erased_less(const void* __lhs, const void* __rhs)
+    { return *static_cast<const _Normalized_alternative<_Tp>*>(__lhs) < *static_cast<const _Normalized_alternative<_Tp>*>(__rhs); }
+
+  template<typename... _Types>
+    bool
+    operator==(const variant<_Types...>& __lhs, const variant<_Types...>& __rhs)
+    {
+      __glibcxx_assert(__lhs.valid() && __rhs.valid());
+      if (__lhs.index() == __rhs.index())
+	{
+	  static constexpr bool (*_S_vtable[])(const void*, const void*) = { &__erased_equal_to<_Types>... };
+	  _S_vtable[__lhs.index()](_Variant_friend::_S_get_raw_storage<void>(__lhs), _Variant_friend::_S_get_raw_storage<void>(__rhs));
+	}
+      return false;
     }
 
   template<typename... _Types>
     bool
-    operator==(const variant<_Types...>&, const variant<_Types...>&);
+    operator!=(const variant<_Types...>& __lhs, const variant<_Types...>& __rhs)
+    { return !(__lhs == __rhs); }
 
   template<typename... _Types>
     bool
-    operator!=(const variant<_Types...>&, const variant<_Types...>&);
+    operator<(const variant<_Types...>& __lhs, const variant<_Types...>& __rhs)
+    {
+      __glibcxx_assert(__lhs.valid() && __rhs.valid());
+      if (__lhs.index() == __rhs.index())
+	{
+	  static constexpr bool (*_S_vtable[])(const void*, const void*) = { &__erased_less<_Types>... };
+	  _S_vtable[__lhs.index()](_Variant_friend::_S_get_raw_storage<void>(__lhs), _Variant_friend::_S_get_raw_storage<void>(__rhs));
+	}
+      return __lhs.index() < __rhs.index();
+    }
 
   template<typename... _Types>
     bool
-    operator<(const variant<_Types...>&, const variant<_Types...>&);
+    operator>(const variant<_Types...>& __lhs, const variant<_Types...>& __rhs)
+    { return __rhs < __lhs; }
 
   template<typename... _Types>
     bool
-    operator>(const variant<_Types...>&, const variant<_Types...>&);
+    operator<=(const variant<_Types...>& __lhs, const variant<_Types...>& __rhs)
+    { return !(__lhs > __rhs); }
 
   template<typename... _Types>
     bool
-    operator<=(const variant<_Types...>&, const variant<_Types...>&);
+    operator>=(const variant<_Types...>& __lhs, const variant<_Types...>& __rhs)
+    { return !(__lhs < __rhs); }
 
-  template<typename... _Types>
-    bool
-    operator>=(const variant<_Types...>&, const variant<_Types...>&);
+  template<bool __is_const, typename _Visitor, typename _Variant_tuple, size_t _Np, typename... _Args>
+    struct _Variant_visitor_helper
+    {
+      template<typename>
+	using _Void_ptr_mapper = conditional_t<__is_const, const void*, void*>;
+
+      static decltype(auto)
+      _S_apply(_Visitor& __visitor, _Variant_tuple __tuple, _Void_ptr_mapper<_Args>... __vptr)
+      {
+	return _S_apply_impl(__visitor, *get<_Np-1>(__tuple), __tuple, __vptr...);
+      }
+
+      template<typename... _Types>
+	static decltype(auto)
+	_S_apply_impl(_Visitor& __visitor, const variant<_Types...>& __v, _Variant_tuple __tuple, _Void_ptr_mapper<_Args>... __vptr)
+	{
+	  static constexpr auto __vtable =
+	    { &_Variant_visitor_helper<__is_const, _Visitor, _Variant_tuple, _Np - 1, _Types, _Args...>::_S_apply...  };
+	  return __vtable.begin()[__v.index()](__visitor, __tuple, _Variant_friend::_S_get_raw_storage<void>(__v), __vptr...);
+	}
+
+      template<typename... _Types>
+	static decltype(auto)
+	_S_apply_impl(_Visitor& __visitor, variant<_Types...>& __v, _Variant_tuple __tuple, _Void_ptr_mapper<_Args>... __vptr)
+	{
+	  static constexpr auto __vtable =
+	    { &_Variant_visitor_helper<__is_const, _Visitor, _Variant_tuple, _Np - 1, _Types, _Args...>::_S_apply...  };
+	  return __vtable.begin()[__v.index()](__visitor, __tuple, _Variant_friend::_S_get_raw_storage<void>(__v), __vptr...);
+	}
+    };
+
+  template<bool __is_const, typename _Visitor, typename _Variant_tuple, typename... _Args>
+    struct _Variant_visitor_helper<__is_const, _Visitor, _Variant_tuple, 0, _Args...>
+    {
+      template<typename>
+	using _Void_ptr_mapper = conditional_t<__is_const, const void*, void*>;
+
+      static decltype(auto)
+      _S_apply(_Visitor& __visitor, _Variant_tuple __tuple, _Void_ptr_mapper<_Args>... __vptr)
+      {
+	return __visitor(*static_cast<conditional_t<__is_const, const _Normalized_alternative<_Args>*, _Normalized_alternative<_Args>*>>(__vptr)...);
+      }
+    };
 
   template<typename _Visitor, typename... _Variants>
     decltype(auto)
-    visit(_Visitor&, _Variants&...);
+    visit(_Visitor& __visitor, _Variants&... __vars)
+    {
+      return _Variant_visitor_helper<false, _Visitor, tuple<_Variants*...>, sizeof...(_Variants)>::_S_apply(__visitor, std::make_tuple(&__vars...));
+    }
 
   template<typename _Visitor, typename... _Variants>
     decltype(auto)
-    visit(const _Visitor&, _Variants&...);
-
+    visit(const _Visitor& __visitor, const _Variants&... __vars)
+    {
+      return _Variant_visitor_helper<true, const _Visitor, tuple<const _Variants*...>, sizeof...(_Variants)>::_S_apply(__visitor, std::make_tuple(&__vars...));
+    }
 }
+
+  template<typename _Tp, typename... _Types>
+    struct tuple_find<_Tp, variant<_Types...>>
+    : public tuple_find<_Tp, tuple<_Types...>> { };
+
 }
   template<typename... _Types>
     struct tuple_size<experimental::variant<_Types...>>
@@ -501,8 +620,44 @@ inline namespace fundamentals_v1
 
   template <typename> struct hash;
 
-  template<typename... _Types>
-    struct hash<experimental::variant<_Types...>>;
+  template<typename _Tp>
+    constexpr size_t
+    __erased_hash(const void* __lhs)
+    { return std::hash<experimental::_Normalized_alternative<_Tp>>{}(*static_cast<const experimental::_Normalized_alternative<_Tp>*>(__lhs)); }
 
-  struct hash<experimental::monostate>;
+  template<typename... _Types>
+    struct hash<experimental::variant<_Types...>>
+    {
+      using result_type = size_t;
+      using argument_type = experimental::variant<_Types...>;
+
+      size_t
+      operator()(const experimental::variant<_Types...>& __t) const
+      noexcept(std::min<bool>({noexcept(hash<_Types>{}(*experimental::_Variant_friend::_S_get_raw_storage<_Types>(__t)))...}))
+      {
+	if (__t.valid())
+	  {
+	    static constexpr auto __hash_fn = { &__erased_hash<_Types>... };
+	    return hash<size_t>{}(__t.index()) + __hash_fn[__t.index()](experimental::_Variant_friend::_S_get_raw_storage<void>(__t));
+	  }
+	else
+	  {
+	    return hash<size_t>{}(__t.index());
+	  }
+      }
+    };
+
+  template<>
+  struct hash<experimental::monostate>
+  {
+    using result_type = size_t;
+    using argument_type = experimental::monostate;
+
+    size_t
+    operator()(const experimental::monostate& __t) const noexcept
+    {
+      constexpr size_t __magic_monostate_hash = static_cast<size_t>(-7777);
+      return static_cast<size_t>(__magic_monostate_hash);
+    }
+  };
 }
