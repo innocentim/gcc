@@ -57,6 +57,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template <size_t _Np, typename _Tp>
     struct tuple_element : std::tuple_element<_Np, _Tp> { };
 
+  template <size_t _Np, typename _Tp>
+    using tuple_element_t = typename tuple_element<_Np, _Tp>::type;
+
 #define __cpp_lib_experimental_tuple 201402
 
   template <typename _Fn, typename _Tuple, std::size_t... _Idx>

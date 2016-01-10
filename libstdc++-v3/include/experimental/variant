@@ -36,6 +36,7 @@
 #else
 
 #include <experimental/tuple>
+#include <experimental/type_traits>
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {
@@ -44,6 +45,141 @@ namespace experimental
 inline namespace fundamentals_v1
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
+namespace __detail
+{
+  template<typename _Alternative, typename = void>
+    struct __variant_storage
+    { using type = _Alternative; };
+
+  template<typename _Alternative>
+    struct __variant_storage<_Alternative, enable_if_t<is_reference_v<_Alternative>>>
+    { using type = reference_wrapper<remove_reference_t<_Alternative>>; };
+
+  template<typename _Alternative>
+    using __variant_storage_t = typename __variant_storage<_Alternative>::type;
+
+  template<typename _Tp>
+    decltype(auto)
+    __forward_cast(void* __ptr)
+    { return forward<_Tp>(*static_cast<remove_reference_t<_Tp>*>(__ptr)); }
+
+  template<typename _Lhs, typename _Rhs>
+    constexpr void
+    __erased_ctor(void* __lhs, void* __rhs)
+    { new (__lhs) remove_reference_t<_Lhs>(__forward_cast<_Rhs>(__rhs)); }
+
+  template<typename _Lhs, typename _Rhs>
+    constexpr void
+    __erased_assign(void* __lhs, void* __rhs)
+    { __forward_cast<_Lhs>(__lhs) = __forward_cast<_Rhs>(__rhs); }
+
+  template<typename _Tp>
+    constexpr void
+    __erased_dtor(void* __ptr)
+    {
+      using _Up = _Tp;
+      __forward_cast<_Up>(__ptr).~_Up();
+    }
+
+  template<typename... _Types>
+    struct _Variant_base : public std::aligned_union<0, _Types...>
+    {
+      constexpr
+      _Variant_base() : _M_index(0)
+      { new (_M_storage()) tuple_element_t<0, tuple<_Types...>>(); }
+
+      _Variant_base(const _Variant_base& __rhs) : _M_index(__rhs._M_index)
+      {
+	if (__rhs._M_valid())
+	  {
+	    static constexpr void (*_S_vtable[])(void*, void*) =
+	      { &__erased_ctor<
+		  __variant_storage_t<_Types>,
+		  const __variant_storage_t<_Types>&>...  };
+	    _S_vtable[__rhs._M_index](_M_storage(), __rhs._M_storage());
+	  }
+      }
+
+      _Variant_base(_Variant_base&& __rhs) : _M_index(__rhs._M_index)
+      {
+	if (__rhs._M_valid())
+	  {
+	    static constexpr void (*_S_vtable[])(void*, void*) =
+	      { &__erased_ctor<
+		  __variant_storage_t<_Types>,
+		  __variant_storage_t<_Types>&&>...  };
+	    _S_vtable[__rhs._M_index](_M_storage(), __rhs._M_storage());
+	  }
+      }
+
+      ~_Variant_base()
+      {
+	if (_M_valid())
+	  {
+	    static constexpr void (*_S_vtable[])(void*) =
+	      { &__erased_dtor<__variant_storage_t<_Types>>...  };
+	    _S_vtable[_M_index](_M_storage());
+	  }
+      }
+
+      _Variant_base&
+      operator=(const _Variant_base& __rhs)
+      {
+	if (_M_index == __rhs._M_index && __rhs._M_valid())
+	  {
+	    static constexpr void (*_S_vtable[])(void*, void*) =
+	      { &__erased_assign<
+		  __variant_storage_t<_Types>&,
+		  const __variant_storage_t<_Types>&>...  };
+	    _S_vtable[__rhs._M_index](_M_storage(), __rhs._M_storage());
+	    _M_index = __rhs._M_index;
+	  }
+	else
+	  {
+	    // Could be faster by using a 2-d vtable.
+	    _Variant_base __tmp(__rhs);
+	    this->~_Variant_base();
+	    new (this) _Variant_base(std::move(__tmp));
+	  }
+	return *this;
+      }
+
+      _Variant_base&
+      operator=(_Variant_base&& __rhs)
+      {
+	if (_M_index == __rhs._M_index && __rhs._M_valid())
+	  {
+	    static constexpr void (*_S_vtable[])(void*, void*) =
+	      { &__erased_assign<
+		  __variant_storage_t<_Types>&,
+		  __variant_storage_t<_Types>&&>...  };
+	    _S_vtable[__rhs._M_index](_M_storage(), __rhs._M_storage());
+	    _M_index = __rhs._M_index;
+	  }
+	else
+	  {
+	    // Could be faster by using a 2-d vtable.
+	    this->~_Variant_base();
+	    new (this) _Variant_base(std::move(__rhs));
+	  }
+	return *this;
+      }
+
+      constexpr void*
+      _M_storage() const
+      {
+	using _Storage_base = std::aligned_union<0, _Types...>;
+	return const_cast<void*>(static_cast<const void*>(static_cast<const _Storage_base*>(this)));
+      }
+
+      constexpr bool
+      _M_valid() const
+      { return _M_index == tuple_not_found; }
+
+      size_t _M_index;
+    };
+
+} // namespace __detail
 
   template<typename... _Types> class variant;
 
