@@ -1,0 +1,209 @@
+// <experimental/variant> -*- C++ -*-
+
+// Copyright (C) 2016 Free Software Foundation, Inc.
+//
+// This file is part of the GNU ISO C++ Library.  This library is free
+// software; you can redistribute it and/or modify it under the
+// terms of the GNU General Public License as published by the
+// Free Software Foundation; either version 3, or (at your option)
+// any later version.
+
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// Under Section 7 of GPL version 3, you are granted additional
+// permissions described in the GCC Runtime Library Exception, version
+// 3.1, as published by the Free Software Foundation.
+
+// You should have received a copy of the GNU General Public License and
+// a copy of the GCC Runtime Library Exception along with this program;
+// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+// <http://www.gnu.org/licenses/>.
+
+/** @file experimental/variant
+ *  This is a TS C++ Library header.
+ */
+
+#ifndef _GLIBCXX_EXPERIMENTAL_VARIANT
+#define _GLIBCXX_EXPERIMENTAL_VARIANT 1
+
+#pragma GCC system_header
+
+#if __cplusplus <= 201103L
+# include <bits/c++14_warning.h>
+#else
+
+#include <experimental/tuple>
+
+namespace std _GLIBCXX_VISIBILITY(default)
+{
+namespace experimental
+{
+inline namespace fundamentals_v1
+{
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
+
+  template<typename... _Types> class variant;
+
+  template<typename _Tp>
+    struct emplaced_type_t { };
+  template<typename _Tp>
+    constexpr emplaced_type_t<_Tp> emplaced_type{};
+
+  template<size_t _Np>
+    struct emplaced_index_t { };
+  template<size_t _Np>
+    constexpr emplaced_index_t<_Np> emplaced_index{};
+
+  template<typename... _Types>
+    struct tuple_size<variant<_Types...>> : tuple_size<tuple<_Types...>> { };
+  template<size_t _Np, typename... _Types>
+    struct tuple_element<_Np, variant<_Types...>> : tuple_element<_Np, tuple<_Types...>> { };
+  template<typename _Tp, typename... _Types>
+    struct tuple_find<_Tp, variant<_Types...>> : tuple_find<_Tp, tuple<_Types...>> { };
+
+  template<typename _Tp, typename... _Types>
+    bool holds_alternative(const variant<_Types...>&) noexcept;
+  template<size_t _Np, typename... _Types>
+    tuple_element_t<_Np, variant<_Types...>>&
+    get(variant<_Types...>&);
+  template<size_t _Np, typename... _Types>
+    tuple_element_t<_Np, variant<_Types...>>&&
+    get(variant<_Types...>&&);
+  template<size_t _Np, typename... _Types>
+    tuple_element_t<_Np, variant<_Types...>> const&
+    get(const variant<_Types...>&);
+  template<size_t _Np, typename... _Types>
+    tuple_element_t<_Np, variant<_Types...>> const&&
+    get(const variant<_Types...>&&);
+
+  template<typename _Tp, typename... _Types>
+    _Tp& get(variant<_Types...>&);
+  template<typename _Tp, typename... _Types>
+    _Tp&& get(variant<_Types...>&&);
+  template<typename _Tp, typename... _Types>
+    const _Tp& get(const variant<_Types...>&);
+  template<typename _Tp, typename... _Types>
+    const _Tp&& get(const variant<_Types...>&&);
+
+  template<size_t _Np, typename... _Types>
+    add_pointer_t<tuple_element_t<_Np, variant<_Types...>>>
+    get_if(variant<_Types...>*) noexcept;
+  template<size_t _Np, typename... _Types>
+    add_pointer_t<const tuple_element_t<_Np, variant<_Types...>>>
+    get_if(const variant<_Types...>*) noexcept;
+
+  template<typename _Tp, typename... _Types>
+    add_pointer_t<_Tp> get_if(variant<_Types...>*) noexcept;
+  template<typename _Tp, typename... _Types>
+    add_pointer_t<const _Tp> get_if(const variant<_Types...>*) noexcept;
+
+  template<typename... _Types>
+    bool operator==(const variant<_Types...>&,
+		    const variant<_Types...>&);
+  template<typename... _Types>
+    bool operator!=(const variant<_Types...>&,
+		    const variant<_Types...>&);
+  template<typename... _Types>
+    bool operator<(const variant<_Types...>&,
+		   const variant<_Types...>&);
+  template<typename... _Types>
+    bool operator>(const variant<_Types...>&,
+		   const variant<_Types...>&);
+  template<typename... _Types>
+    bool operator<=(const variant<_Types...>&,
+		    const variant<_Types...>&);
+  template<typename... _Types>
+    bool operator>=(const variant<_Types...>&,
+		    const variant<_Types...>&);
+
+  template<typename _Visitor, typename... _Variants>
+    decltype(auto) visit(_Visitor&&, _Variants&&...);
+
+  struct monostate { };
+
+  constexpr bool operator<(monostate, monostate) noexcept;
+  constexpr bool operator>(monostate, monostate) noexcept;
+  constexpr bool operator<=(monostate, monostate) noexcept;
+  constexpr bool operator>=(monostate, monostate) noexcept;
+  constexpr bool operator==(monostate, monostate) noexcept;
+  constexpr bool operator!=(monostate, monostate) noexcept;
+
+  template<typename... _Types>
+    void swap(variant<_Types...>&, variant<_Types...>&) noexcept(true);
+
+  class bad_variant_access;
+
+  template<typename... _Types>
+    class variant
+    {
+    public:
+      constexpr variant() noexcept(true);
+      variant(const variant&) noexcept(true);
+      variant(variant&&) noexcept(true);
+
+      template<typename _Tp> constexpr variant(_Tp&&);
+
+      template<typename _Tp, typename... _Args>
+	constexpr explicit variant(emplaced_type_t<_Tp>, _Args&&...);
+      template<typename _Tp, typename _Up, typename... _Args>
+	constexpr variant(emplaced_type_t<_Tp>, initializer_list<_Up>, _Args&&...);
+
+      template<size_t _Np, typename... _Args>
+	constexpr explicit variant(emplaced_index_t<_Np>, _Args&&...);
+      template<size_t _Np, typename _Up, typename... _Args>
+	constexpr variant(emplaced_index_t<_Np>, initializer_list<_Up>, _Args&&...);
+
+      template<typename _Alloc>
+	variant(allocator_arg_t, const _Alloc&);
+      template<typename _Alloc>
+	variant(allocator_arg_t, const _Alloc& a, const variant&);
+      template<typename _Alloc>
+	variant(allocator_arg_t, const _Alloc& a, variant&&);
+      template<typename _Alloc, typename _Tp>
+	variant(allocator_arg_t, const _Alloc&, _Tp&&);
+      template<typename _Alloc, typename _Tp, typename... _Args>
+	variant(allocator_arg_t, const _Alloc&, emplaced_type_t<_Tp>, _Args&&...);
+      template<typename _Alloc, typename _Tp, typename _Up, typename... _Args>
+	variant(allocator_arg_t, const _Alloc&, emplaced_type_t<_Tp>, initializer_list<_Up>, _Args&&...);
+      template<typename _Alloc, size_t _Np, typename... _Args>
+	variant(allocator_arg_t, const _Alloc&, emplaced_index_t<_Np>, _Args&&...);
+      template<typename _Alloc, size_t _Np, typename _Up, typename... _Args>
+	variant(allocator_arg_t, const _Alloc&, emplaced_index_t<_Np>, initializer_list<_Up>, _Args&&...);
+
+      ~variant();
+
+      variant& operator=(const variant&);
+      variant& operator=(variant&&) noexcept(true);
+
+      template<typename _Tp> variant& operator=(_Tp&&) noexcept(true);
+
+      template<typename _Tp, typename... _Args> void emplace(_Args&&...);
+      template<typename _Tp, typename _Up, typename... _Args>
+	void emplace(initializer_list<_Up>, _Args&&...);
+      template<size_t _Np, typename... _Args> void emplace(_Args&&...);
+      template<size_t _Np, typename _Up, typename... _Args>
+	void emplace(initializer_list<_Up>, _Args&&...);
+
+      bool valueless_by_exception() const noexcept;
+      size_t index() const noexcept;
+
+      void swap(variant&) noexcept(true);
+
+    private:
+    };
+
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace fundamentals_v1
+} // namespace experimental
+
+  template<typename _Tp> struct hash;
+  template<typename... _Types> struct hash<experimental::variant<_Types...>>;
+  template<> struct hash<experimental::monostate>;
+} // namespace std
+
+#endif // C++14
+
+#endif // _GLIBCXX_EXPERIMENTAL_VARIANT
