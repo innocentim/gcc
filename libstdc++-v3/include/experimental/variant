@@ -70,15 +70,15 @@ namespace __variant
 
   template<typename _From, typename _To>
     struct __reserved_type_map_impl<const _From, _To>
-    { using type = add_const<__reserved_type_map<_From, _To>>; };
+    { using type = add_const_t<__reserved_type_map<_From, _To>>; };
 
   template<typename _From, typename _To>
     struct __reserved_type_map_impl<volatile _From, _To>
-    { using type = add_volatile<__reserved_type_map<_From, _To>>; };
+    { using type = add_volatile_t<__reserved_type_map<_From, _To>>; };
 
   template<typename _From, typename _To>
     struct __reserved_type_map_impl<const volatile _From, _To>
-    { using type = add_cv<__reserved_type_map<_From, _To>>; };
+    { using type = add_cv_t<__reserved_type_map<_From, _To>>; };
 
   template<typename _Ap, typename _Dp, typename _Sp>
     struct _Alternative
@@ -624,8 +624,8 @@ namespace __variant
       private _Enable_default_constructor<is_default_constructible_v<tuple_element_t<0, variant<_Types...>>>, variant<_Types...>>,
       private _Enable_copy_move<
 	  __and_<is_copy_constructible<_Types>...>::value,
-	  __and_<is_move_constructible<_Types>...>::value,
 	  __and_<is_copy_constructible<_Types>..., is_move_constructible<_Types>..., is_copy_assignable<_Types>...>::value,
+	  __and_<is_move_constructible<_Types>...>::value,
 	  __and_<is_move_constructible<_Types>..., is_move_assignable<_Types>...>::value,
 	  variant<_Types...>>
     {
