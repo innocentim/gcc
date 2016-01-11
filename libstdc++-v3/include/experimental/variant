@@ -37,6 +37,7 @@
 
 #include <experimental/tuple>
 #include <experimental/type_traits>
+#include <bits/enable_special_members.h>
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {
@@ -45,18 +46,77 @@ namespace experimental
 inline namespace fundamentals_v1
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
+
+  template<typename... _Types> class variant;
+
 namespace __detail
 {
+namespace __variant
+{
+  template<typename _From, typename _To>
+    struct __reserved_type_map_impl
+    { using type = _To; };
+
+  template<typename _From, typename _To>
+    using __reserved_type_map = typename __reserved_type_map_impl<_From, _To>::type;
+
+  template<typename _From, typename _To>
+    struct __reserved_type_map_impl<_From&, _To>
+    { using type = add_lvalue_reference_t<__reserved_type_map<_From, _To>>; };
+
+  template<typename _From, typename _To>
+    struct __reserved_type_map_impl<_From&&, _To>
+    { using type = add_rvalue_reference_t<__reserved_type_map<_From, _To>>; };
+
+  template<typename _From, typename _To>
+    struct __reserved_type_map_impl<const _From, _To>
+    { using type = add_const<__reserved_type_map<_From, _To>>; };
+
+  template<typename _From, typename _To>
+    struct __reserved_type_map_impl<volatile _From, _To>
+    { using type = add_volatile<__reserved_type_map<_From, _To>>; };
+
+  template<typename _From, typename _To>
+    struct __reserved_type_map_impl<const volatile _From, _To>
+    { using type = add_cv<__reserved_type_map<_From, _To>>; };
+
+  template<typename _Ap, typename _Dp, typename _Sp>
+    struct _Alternative
+    {
+      using _Alternative_type = _Ap;
+      using _Desired_type = _Dp;
+      using _Stored_type = _Sp;
+    };
+
   template<typename _Alternative, typename = void>
-    struct __variant_storage
+    struct __storage
     { using type = _Alternative; };
 
-  template<typename _Alternative>
-    struct __variant_storage<_Alternative, enable_if_t<is_reference_v<_Alternative>>>
-    { using type = reference_wrapper<remove_reference_t<_Alternative>>; };
+  template<typename _Tp>
+    struct _Reference_storage
+    {
+      _Reference_storage(_Tp& __ref) : _M_storage(&__ref) { }
+      _Reference_storage(_Tp&& __ref) : _M_storage(&__ref) { }
+
+      operator _Tp&()
+      { return *_M_storage; }
+
+      operator _Tp&&()
+      { return std::move(*_M_storage); }
+
+      _Tp* _M_storage;
+    };
 
   template<typename _Alternative>
-    using __variant_storage_t = typename __variant_storage<_Alternative>::type;
+    struct __storage<_Alternative, enable_if_t<is_reference_v<_Alternative>>>
+    { using type = _Reference_storage<remove_reference_t<_Alternative>>; };
+
+  template<typename _Alternative>
+    struct __storage<_Alternative, enable_if_t<is_void_v<_Alternative>>>
+    { using type = tuple<>; };
+
+  template<typename _Qualification_type, typename _Alternative_type>
+    using _Create_alt_type = _Alternative<_Alternative_type, __reserved_type_map<_Qualification_type, _Alternative_type>, typename __storage<_Alternative_type>::type>;
 
   template<typename _Tp>
     decltype(auto)
@@ -66,48 +126,76 @@ namespace __detail
   template<typename _Lhs, typename _Rhs>
     constexpr void
     __erased_ctor(void* __lhs, void* __rhs)
-    { new (__lhs) remove_reference_t<_Lhs>(__forward_cast<_Rhs>(__rhs)); }
-
-  template<typename _Lhs, typename _Rhs>
-    constexpr void
-    __erased_assign(void* __lhs, void* __rhs)
-    { __forward_cast<_Lhs>(__lhs) = __forward_cast<_Rhs>(__rhs); }
+    { new (__lhs) remove_reference_t<typename _Lhs::_Stored_type>(__forward_cast<typename _Rhs::_Stored_type>(__rhs)); }
 
   template<typename _Tp>
     constexpr void
     __erased_dtor(void* __ptr)
     {
-      using _Up = _Tp;
+      using _Up = typename _Tp::_Stored_type;
       __forward_cast<_Up>(__ptr).~_Up();
     }
 
+  template<typename _Lhs, typename _Rhs>
+    constexpr void
+    __erased_assign(void* __lhs, void* __rhs)
+    {
+      static_assert(!is_reference_v<typename _Lhs::_Alternative_type>, "BUG: references are not assignable");
+      static_assert(!is_reference_v<typename _Rhs::_Alternative_type>, "BUG: references are not assignable");
+      __forward_cast<typename _Lhs::_Desired_type>(__lhs) = __forward_cast<typename _Rhs::_Desired_type>(__rhs);
+    }
+
+  template<typename _Lhs, typename _Rhs>
+    constexpr void
+    __erased_swap(void* __lhs, void* __rhs)
+    {
+      static_assert(!is_reference_v<typename _Lhs::_Alternative_type>, "BUG: references are not assignable");
+      static_assert(!is_reference_v<typename _Rhs::_Alternative_type>, "BUG: references are not assignable");
+      using std::swap;
+      swap(__forward_cast<typename _Lhs::_Desired_type>(__lhs), __forward_cast<typename _Rhs::_Desired_type>(__rhs));
+    }
+
+  template<typename _Lhs, typename _Rhs>
+    constexpr bool
+    __erased_equal_to(void* __lhs, void* __rhs)
+    { return __forward_cast<typename _Lhs::_Desired_type>(__lhs) == __forward_cast<typename _Rhs::_Desired_type>(__rhs); }
+
+  template<typename _Lhs, typename _Rhs>
+    constexpr bool
+    __erased_less_than(void* __lhs, void* __rhs)
+    { return __forward_cast<typename _Lhs::_Desired_type>(__lhs) < __forward_cast<typename _Rhs::_Desired_type>(__rhs); }
+
   template<typename... _Types>
-    struct _Variant_base : public std::aligned_union<0, _Types...>
+    struct _Variant_base
     {
       constexpr
-      _Variant_base() : _M_index(0)
-      { new (_M_storage()) tuple_element_t<0, tuple<_Types...>>(); }
+      _Variant_base() noexcept(is_nothrow_default_constructible_v<tuple_element_t<0, tuple<_Types...>>>) 
+      : _M_index(0)
+      {
+	new (_M_storage()) typename _Create_alt_type<int, tuple_element_t<0, tuple<_Types...>>>::_Stored_type();
+	__glibcxx_assert(_M_valid());
+	__glibcxx_assert(_M_index == 0);
+      }
+
+      _Variant_base(tuple<>) noexcept : _M_index(tuple_not_found) { }
 
       _Variant_base(const _Variant_base& __rhs) : _M_index(__rhs._M_index)
       {
 	if (__rhs._M_valid())
 	  {
 	    static constexpr void (*_S_vtable[])(void*, void*) =
-	      { &__erased_ctor<
-		  __variant_storage_t<_Types>,
-		  const __variant_storage_t<_Types>&>...  };
+	      { &__erased_ctor<_Create_alt_type<int&, _Types>, _Create_alt_type<const int&, _Types>>... };
 	    _S_vtable[__rhs._M_index](_M_storage(), __rhs._M_storage());
 	  }
       }
 
-      _Variant_base(_Variant_base&& __rhs) : _M_index(__rhs._M_index)
+      _Variant_base(_Variant_base&& __rhs) noexcept(__and_<is_nothrow_move_constructible<_Types>...>::value)
+      : _M_index(__rhs._M_index)
       {
 	if (__rhs._M_valid())
 	  {
 	    static constexpr void (*_S_vtable[])(void*, void*) =
-	      { &__erased_ctor<
-		  __variant_storage_t<_Types>,
-		  __variant_storage_t<_Types>&&>...  };
+	      { &__erased_ctor<_Create_alt_type<int&, _Types>, _Create_alt_type<int&&, _Types>>... };
 	    _S_vtable[__rhs._M_index](_M_storage(), __rhs._M_storage());
 	  }
       }
@@ -117,7 +205,7 @@ namespace __detail
 	if (_M_valid())
 	  {
 	    static constexpr void (*_S_vtable[])(void*) =
-	      { &__erased_dtor<__variant_storage_t<_Types>>...  };
+	      { &__erased_dtor<_Create_alt_type<int&, _Types>>... };
 	    _S_vtable[_M_index](_M_storage());
 	  }
       }
@@ -125,14 +213,14 @@ namespace __detail
       _Variant_base&
       operator=(const _Variant_base& __rhs)
       {
-	if (_M_index == __rhs._M_index && __rhs._M_valid())
+	if (_M_index == __rhs._M_index)
 	  {
-	    static constexpr void (*_S_vtable[])(void*, void*) =
-	      { &__erased_assign<
-		  __variant_storage_t<_Types>&,
-		  const __variant_storage_t<_Types>&>...  };
-	    _S_vtable[__rhs._M_index](_M_storage(), __rhs._M_storage());
-	    _M_index = __rhs._M_index;
+	    if (__rhs._M_valid())
+	      {
+		static constexpr void (*_S_vtable[])(void*, void*) =
+		  { &__erased_assign<_Create_alt_type<int&, _Types>, _Create_alt_type<const int&, _Types>>... };
+		_S_vtable[__rhs._M_index](_M_storage(), __rhs._M_storage());
+	      }
 	  }
 	else
 	  {
@@ -141,20 +229,21 @@ namespace __detail
 	    this->~_Variant_base();
 	    new (this) _Variant_base(std::move(__tmp));
 	  }
+	__glibcxx_assert(_M_index == __rhs._M_index);
 	return *this;
       }
 
       _Variant_base&
-      operator=(_Variant_base&& __rhs)
+      operator=(_Variant_base&& __rhs) noexcept(__and_<is_nothrow_move_constructible<_Types>..., is_nothrow_move_assignable<_Types>...>::value)
       {
-	if (_M_index == __rhs._M_index && __rhs._M_valid())
+	if (_M_index == __rhs._M_index)
 	  {
-	    static constexpr void (*_S_vtable[])(void*, void*) =
-	      { &__erased_assign<
-		  __variant_storage_t<_Types>&,
-		  __variant_storage_t<_Types>&&>...  };
-	    _S_vtable[__rhs._M_index](_M_storage(), __rhs._M_storage());
-	    _M_index = __rhs._M_index;
+	    if (__rhs._M_valid())
+	      {
+		static constexpr void (*_S_vtable[])(void*, void*) =
+		  { &__erased_assign<_Create_alt_type<int&, _Types>, _Create_alt_type<int&&, _Types>>... };
+		_S_vtable[__rhs._M_index](_M_storage(), __rhs._M_storage());
+	      }
 	  }
 	else
 	  {
@@ -167,21 +256,134 @@ namespace __detail
 
       constexpr void*
       _M_storage() const
-      {
-	using _Storage_base = std::aligned_union<0, _Types...>;
-	return const_cast<void*>(static_cast<const void*>(static_cast<const _Storage_base*>(this)));
-      }
+      { return const_cast<void*>(static_cast<const void*>(&_M_st)); }
 
       constexpr bool
-      _M_valid() const
-      { return _M_index == tuple_not_found; }
+      _M_valid() const noexcept
+      { return _M_index != tuple_not_found; }
 
+      std::aligned_union_t<0, typename _Create_alt_type<int, _Types>::_Stored_type...> _M_st;
       size_t _M_index;
     };
 
-} // namespace __detail
+  template<typename _Tp, typename _Tuple>
+    struct __tuple_count;
 
-  template<typename... _Types> class variant;
+  template<typename _Tp, typename _Tuple>
+    static constexpr size_t __tuple_count_v = __tuple_count<_Tp, _Tuple>::value;
+
+  template<typename _Tp, typename... _Types>
+    struct __tuple_count<_Tp, tuple<_Types...>> : integral_constant<size_t, 0> { };
+
+  template<typename _Tp, typename _First, typename... _Rest>
+    struct __tuple_count<_Tp, tuple<_First, _Rest...>> : integral_constant<size_t, __tuple_count_v<_Tp, tuple<_Rest...>> + is_same_v<_Tp, _First>> { };
+
+  template<typename _Tp, typename... _Types>
+    static constexpr bool __exactly_once = __tuple_count_v<_Tp, tuple<_Types...>> == 1;
+
+  // TODO: Implement it.
+  template<typename _Tp, typename _Variant, typename = void>
+    struct __acceptable_type : integral_constant<bool, false> { };
+
+  template<typename _Tp, typename... _Types>
+    struct __acceptable_type<_Tp, variant<_Types...>, enable_if_t<__exactly_once<decay_t<_Tp>, _Types...>>> : integral_constant<bool, true>
+    {
+      static constexpr size_t _S_index = tuple_find_v<decay_t<_Tp>, tuple<_Types...>>;
+    };
+
+  template<typename _Variant>
+    void* __get_storage(_Variant&& __v)
+    { return __v._M_storage(); }
+
+  template<typename _Variant, typename _Tp>
+    decltype(auto) __access(_Variant&& __v)
+    {
+      using _Alt = _Create_alt_type<_Variant&&, _Tp>;
+      return static_cast<typename _Alt::_Desired_type>(*static_cast<typename _Alt::_Stored_type*>(__v._M_storage()));
+    }
+
+  template<typename _From, typename _To>
+    using _To_type = _To;
+
+  template<typename _Visitor, typename... _Args>
+    decltype(auto) __visit_invoke(_Visitor&& __visitor, _To_type<_Args, void*>... __ptrs)
+    { return forward<_Visitor>(__visitor)(static_cast<typename _Args::_Desired_type>(*static_cast<typename _Args::_Stored_type*>(__ptrs))...); }
+
+  template<typename _Result_type, typename _Visitor, typename _Variant_tuple, typename _Table_ptr, typename... _Args>
+    struct __init_vtable
+    {
+      constexpr static
+      tuple<>
+      _S_init(_Table_ptr __table_ptr)
+      {
+	return _S_init_all_alternatives(__table_ptr, make_index_sequence<tuple_size_v<decay_t<tuple_element_t<sizeof...(_Args), _Variant_tuple>>>>());
+      }
+
+      template<size_t... __indices>
+	constexpr static tuple<>
+	_S_init_all_alternatives(_Table_ptr __table_ptr, index_sequence<__indices...>)
+	{
+	  return tuple_cat(_S_init_single_alternative<__indices>(__table_ptr)...);
+	}
+
+      template<size_t __index>
+	constexpr static tuple<>
+	_S_init_single_alternative(_Table_ptr __table_ptr)
+	{
+	  using _Variant = tuple_element_t<sizeof...(_Args), _Variant_tuple>;
+	  using _Arg = _Create_alt_type<_Variant, tuple_element_t<__index, decay_t<_Variant>>>;
+	  return __init_vtable<_Result_type, _Visitor, _Variant_tuple, remove_reference_t<decltype(**__table_ptr)>*, _Args..., _Arg>::_S_init(&(*__table_ptr)[__index]);
+	}
+    };
+
+  template<typename _Result_type, typename _Visitor, typename _Variant_tuple, typename... _Args>
+    struct __init_vtable<_Result_type, _Visitor, _Variant_tuple, _Result_type (**)(_Visitor, _To_type<_Args, void*>...), _Args...>
+    {
+      constexpr static
+      tuple<>
+      _S_init(_Result_type (**entry)(_Visitor, _To_type<_Args, void*>...))
+      {
+	static_assert(is_same<_Result_type, decltype(__visit_invoke<_Visitor, _Args...>(declval<_Visitor>(), declval<_To_type<_Args, void*>>()...))>::value,
+		      "All branches of _Visitor should return the same type");
+	*entry = &__visit_invoke<_Visitor, _Args...>;
+	return {};
+      }
+    };
+
+  template<typename _Tp, size_t... __dimensions>
+    struct __array_traits
+    {
+      using type = _Tp;
+
+      constexpr static _Tp&
+      _S_access(type* __ptr)
+      { return *__ptr; }
+    };
+
+  template<typename _Tp, size_t __first, size_t... __rest>
+    struct __array_traits<_Tp, __first, __rest...>
+    {
+      using type = typename __array_traits<_Tp, __rest...>::type[__first];
+
+      constexpr static _Tp&
+      _S_access(type* __ptr, size_t __index, decay_t<decltype(__rest)>... __indices)
+      { return __array_traits<_Tp, __rest...>::_S_access(&(*__ptr)[__index], __indices...); }
+    };
+
+  template<typename _Result_type, typename _Visitor, typename... _Variants>
+    constexpr auto
+    __gen_vtable()
+    {
+      using _Func_ptr = _Result_type (*)(_Visitor, _To_type<_Variants, void*>...);
+      using _Array_trait = __array_traits<_Func_ptr, sizeof...(_Variants)>;
+      using _Vtable_type = typename _Array_trait::type;
+      struct { _Vtable_type _M_data; } __vtable{};
+      (void)__init_vtable<_Result_type, _Visitor, tuple<_Variants&&...>, _Vtable_type*>::_S_init(&__vtable._M_data);
+      return __vtable;
+    }
+
+} // namespace __variant
+} // namespace __detail
 
   template<typename _Tp>
     struct emplaced_type_t { };
@@ -195,103 +397,288 @@ namespace __detail
 
   template<typename... _Types>
     struct tuple_size<variant<_Types...>> : tuple_size<tuple<_Types...>> { };
+
   template<size_t _Np, typename... _Types>
     struct tuple_element<_Np, variant<_Types...>> : tuple_element<_Np, tuple<_Types...>> { };
+
   template<typename _Tp, typename... _Types>
     struct tuple_find<_Tp, variant<_Types...>> : tuple_find<_Tp, tuple<_Types...>> { };
 
   template<typename _Tp, typename... _Types>
-    bool holds_alternative(const variant<_Types...>&) noexcept;
+    bool holds_alternative(const variant<_Types...>& __v) noexcept
+    {
+      static_assert(__detail::__variant::__exactly_once<_Tp, _Types...>,
+		    "T should occur for exactly once in alternatives");
+      return __v.index() == tuple_find_v<_Tp, variant<_Types...>>;
+    }
+
   template<size_t _Np, typename... _Types>
     tuple_element_t<_Np, variant<_Types...>>&
     get(variant<_Types...>&);
+
   template<size_t _Np, typename... _Types>
     tuple_element_t<_Np, variant<_Types...>>&&
     get(variant<_Types...>&&);
+
   template<size_t _Np, typename... _Types>
-    tuple_element_t<_Np, variant<_Types...>> const&
+    const tuple_element_t<_Np, variant<_Types...>>&
     get(const variant<_Types...>&);
+
   template<size_t _Np, typename... _Types>
-    tuple_element_t<_Np, variant<_Types...>> const&&
+    const tuple_element_t<_Np, variant<_Types...>>&&
     get(const variant<_Types...>&&);
 
   template<typename _Tp, typename... _Types>
-    _Tp& get(variant<_Types...>&);
+    _Tp& get(variant<_Types...>& __v)
+    {
+      static_assert(__detail::__variant::__exactly_once<_Tp, _Types...>,
+		    "T should occur for exactly once in alternatives");
+      static_assert(!is_void_v<_Tp>, "_Tp should not be void");
+      return get<tuple_find_v<_Tp, variant<_Types...>>>(__v);
+    }
+
   template<typename _Tp, typename... _Types>
-    _Tp&& get(variant<_Types...>&&);
+    _Tp&& get(variant<_Types...>&& __v)
+    {
+      static_assert(__detail::__variant::__exactly_once<_Tp, _Types...>,
+		    "T should occur for exactly once in alternatives");
+      static_assert(!is_void_v<_Tp>, "_Tp should not be void");
+      return get<tuple_find_v<_Tp, variant<_Types...>>>(std::move(__v));
+    }
+
   template<typename _Tp, typename... _Types>
-    const _Tp& get(const variant<_Types...>&);
+    const _Tp& get(const variant<_Types...>& __v)
+    {
+      static_assert(__detail::__variant::__exactly_once<_Tp, _Types...>,
+		    "T should occur for exactly once in alternatives");
+      static_assert(!is_void_v<_Tp>, "_Tp should not be void");
+      return get<tuple_find_v<_Tp, variant<_Types...>>>(__v);
+    }
+
   template<typename _Tp, typename... _Types>
-    const _Tp&& get(const variant<_Types...>&&);
+    const _Tp&& get(const variant<_Types...>&& __v)
+    {
+      static_assert(__detail::__variant::__exactly_once<_Tp, _Types...>,
+		    "T should occur for exactly once in alternatives");
+      static_assert(!is_void_v<_Tp>, "_Tp should not be void");
+      return get<tuple_find_v<_Tp, variant<_Types...>>>(std::move(__v));
+    }
 
   template<size_t _Np, typename... _Types>
     add_pointer_t<tuple_element_t<_Np, variant<_Types...>>>
-    get_if(variant<_Types...>*) noexcept;
+    get_if(variant<_Types...>* __ptr) noexcept
+    {
+      static_assert(_Np < sizeof...(_Types), "_Np should be in [0, number of alternatives)");
+      static_assert(!is_void_v<tuple_element_t<_Np, variant<_Types...>>>, "_Tp should not be void");
+      if (__ptr && __ptr->index() == _Np)
+	return &__detail::__variant::__access(*__ptr);
+      return nullptr;
+    }
+
   template<size_t _Np, typename... _Types>
     add_pointer_t<const tuple_element_t<_Np, variant<_Types...>>>
-    get_if(const variant<_Types...>*) noexcept;
+    get_if(const variant<_Types...>* __ptr) noexcept
+    {
+      static_assert(_Np < sizeof...(_Types), "_Np should be in [0, number of alternatives)");
+      static_assert(!is_void_v<tuple_element_t<_Np, variant<_Types...>>>, "_Tp should not be void");
+      if (__ptr && __ptr->index() == _Np)
+	return &__detail::__variant::__access(*__ptr);
+      return nullptr;
+    }
 
   template<typename _Tp, typename... _Types>
-    add_pointer_t<_Tp> get_if(variant<_Types...>*) noexcept;
+    add_pointer_t<_Tp> get_if(variant<_Types...>* __ptr) noexcept
+    {
+      static_assert(__detail::__variant::__exactly_once<_Tp, _Types...>,
+		    "T should occur for exactly once in alternatives");
+      static_assert(!is_void_v<_Tp>, "_Tp should not be void");
+      return get_if<tuple_find_v<_Tp, variant<_Types...>>>(__ptr);
+    }
+
   template<typename _Tp, typename... _Types>
-    add_pointer_t<const _Tp> get_if(const variant<_Types...>*) noexcept;
+    add_pointer_t<const _Tp> get_if(const variant<_Types...>* __ptr) noexcept
+    {
+      static_assert(__detail::__variant::__exactly_once<_Tp, _Types...>,
+		    "T should occur for exactly once in alternatives");
+      static_assert(!is_void_v<_Tp>, "_Tp should not be void");
+      return get_if<tuple_find_v<_Tp, variant<_Types...>>>(__ptr);
+    }
 
   template<typename... _Types>
-    bool operator==(const variant<_Types...>&,
-		    const variant<_Types...>&);
+    bool operator==(const variant<_Types...>& __lhs,
+		    const variant<_Types...>& __rhs)
+    {
+      if (__lhs.index() == __rhs.index() && !__lhs.valueless_by_exception())
+	{
+	  using __detail::__variant::_Create_alt_type;
+	  static constexpr bool (*_S_vtable[])(void*, void*) =
+	    { &__detail::__variant::__erased_equal_to<
+	      _Create_alt_type<const int&, _Types>,
+	      _Create_alt_type<const int&, _Types>>... };
+	  return _S_vtable[__lhs.index()](
+	      __detail::__variant::__get_storage(__lhs),
+	      __detail::__variant::__get_storage(__rhs));
+	}
+      return false;
+    }
+
   template<typename... _Types>
-    bool operator!=(const variant<_Types...>&,
-		    const variant<_Types...>&);
+    bool operator!=(const variant<_Types...>& __lhs,
+		    const variant<_Types...>& __rhs)
+    { return !(__lhs == __rhs); }
+
   template<typename... _Types>
-    bool operator<(const variant<_Types...>&,
-		   const variant<_Types...>&);
+    bool operator<(const variant<_Types...>& __lhs,
+		   const variant<_Types...>& __rhs)
+    {
+      if (__lhs.index() < __rhs.index())
+	return true;
+
+      if (__lhs.index() == __rhs.index() && !__lhs.valueless_by_exception())
+	{
+	  using __detail::__variant::_Create_alt_type;
+	  static constexpr bool (*_S_vtable[])(void*, void*) =
+	    { &__detail::__variant::__erased_less_than<
+	      _Create_alt_type<const int&, _Types>,
+	      _Create_alt_type<const int&, _Types>>... };
+	  return _S_vtable[__lhs.index()](
+	      __detail::__variant::__get_storage(__lhs),
+	      __detail::__variant::__get_storage(__rhs));
+	}
+      return false;
+    }
+
   template<typename... _Types>
-    bool operator>(const variant<_Types...>&,
-		   const variant<_Types...>&);
+    bool operator>(const variant<_Types...>& __lhs,
+		   const variant<_Types...>& __rhs)
+    { return __rhs < __lhs; }
+
   template<typename... _Types>
-    bool operator<=(const variant<_Types...>&,
-		    const variant<_Types...>&);
+    bool operator<=(const variant<_Types...>& __lhs,
+		    const variant<_Types...>& __rhs)
+    { return !(__lhs > __rhs); }
+
   template<typename... _Types>
-    bool operator>=(const variant<_Types...>&,
-		    const variant<_Types...>&);
+    bool operator>=(const variant<_Types...>& __lhs,
+		    const variant<_Types...>& __rhs)
+    { return !(__lhs < __rhs); }
 
   template<typename _Visitor, typename... _Variants>
     decltype(auto) visit(_Visitor&&, _Variants&&...);
 
   struct monostate { };
 
-  constexpr bool operator<(monostate, monostate) noexcept;
-  constexpr bool operator>(monostate, monostate) noexcept;
-  constexpr bool operator<=(monostate, monostate) noexcept;
-  constexpr bool operator>=(monostate, monostate) noexcept;
-  constexpr bool operator==(monostate, monostate) noexcept;
-  constexpr bool operator!=(monostate, monostate) noexcept;
+  constexpr bool operator<(monostate, monostate) noexcept
+  { return false; }
+
+  constexpr bool operator>(monostate, monostate) noexcept
+  { return false; }
+
+  constexpr bool operator<=(monostate, monostate) noexcept
+  { return true; }
+
+  constexpr bool operator>=(monostate, monostate) noexcept
+  { return true; }
+
+  constexpr bool operator==(monostate, monostate) noexcept
+  { return true; }
+
+  constexpr bool operator!=(monostate, monostate) noexcept
+  { return false; }
 
   template<typename... _Types>
-    void swap(variant<_Types...>&, variant<_Types...>&) noexcept(true);
+    void swap(variant<_Types...>& __lhs, variant<_Types...>& __rhs) noexcept(noexcept(__lhs.swap(__rhs)))
+    { __lhs.swap(__rhs); }
 
-  class bad_variant_access;
+  class bad_variant_access : public exception
+  {
+  public:
+    bad_variant_access() noexcept : _M_reason("Unknown reason") { }
+    const char* what() const noexcept override
+    { return _M_reason; }
+
+  private:
+    bad_variant_access(const char* __reason) : _M_reason(__reason) { }
+
+    const char* _M_reason;
+
+    friend void __throw_bad_variant_access(const char* __what);
+  };
+
+  inline void
+  __throw_bad_variant_access(const char* __what)
+  { _GLIBCXX_THROW_OR_ABORT(bad_variant_access(__what)); }
 
   template<typename... _Types>
     class variant
+    : private __detail::__variant::_Variant_base<_Types...>,
+      private _Enable_default_constructor<is_default_constructible_v<tuple_element_t<0, variant<_Types...>>>, variant<_Types...>>,
+      private _Enable_copy_move<
+	  __and_<is_copy_constructible<_Types>...>::value,
+	  __and_<is_move_constructible<_Types>...>::value,
+	  __and_<is_copy_constructible<_Types>..., is_move_constructible<_Types>..., is_copy_assignable<_Types>...>::value,
+	  __and_<is_move_constructible<_Types>..., is_move_assignable<_Types>...>::value,
+	  variant<_Types...>>
     {
+    private:
+      template<typename _Tp>
+	static constexpr bool
+	__exactly_once = __detail::__variant::__exactly_once<_Tp, _Types...>;
+
+      template<typename _Tp>
+	static constexpr bool __acceptable = __detail::__variant::__acceptable_type<_Tp, variant>::value;
+
+      template<typename _Tp>
+	static constexpr size_t __accepted_index = __detail::__variant::__acceptable_type<_Tp, variant>::_S_index;
+
+      template<typename _Tp>
+	using __accepted_type = tuple_element_t<__accepted_index<_Tp>, variant>;
+
+      template<size_t _Np>
+	using __storage_type = typename __detail::__variant::_Create_alt_type<int, tuple_element_t<_Np, variant>>::_Stored_type;
+
     public:
-      constexpr variant() noexcept(true);
-      variant(const variant&) noexcept(true);
-      variant(variant&&) noexcept(true);
+      constexpr variant() noexcept(is_nothrow_default_constructible_v<tuple_element_t<0, variant>>) = default;
+      variant(const variant&) = default;
+      variant(variant&&) noexcept(__and_<is_nothrow_move_constructible<_Types>...>::value) = default;
 
-      template<typename _Tp> constexpr variant(_Tp&&);
+      template<typename _Tp, typename = enable_if_t<__acceptable<_Tp&&> && __and_<is_move_constructible<_Types>...>::value>>
+	constexpr
+	variant(_Tp&& __t)
+	: variant(emplaced_index<__accepted_index<_Tp&&>>, forward<_Tp>(__t))
+	{ __glibcxx_assert(holds_alternative<__accepted_type<_Tp&&>>(*this)); }
 
-      template<typename _Tp, typename... _Args>
-	constexpr explicit variant(emplaced_type_t<_Tp>, _Args&&...);
-      template<typename _Tp, typename _Up, typename... _Args>
-	constexpr variant(emplaced_type_t<_Tp>, initializer_list<_Up>, _Args&&...);
+      template<typename _Tp, typename... _Args, typename = enable_if_t<__exactly_once<_Tp> && is_constructible_v<_Tp, _Args&&...>>>
+	constexpr explicit
+	variant(emplaced_type_t<_Tp>, _Args&&... __args)
+	: variant(emplaced_index<tuple_find_v<_Tp, variant>>, forward<_Args>(__args)...)
+	{ __glibcxx_assert(holds_alternative<_Tp>(*this)); }
 
-      template<size_t _Np, typename... _Args>
-	constexpr explicit variant(emplaced_index_t<_Np>, _Args&&...);
-      template<size_t _Np, typename _Up, typename... _Args>
-	constexpr variant(emplaced_index_t<_Np>, initializer_list<_Up>, _Args&&...);
+      template<typename _Tp, typename _Up, typename... _Args,
+	       typename = enable_if_t<__exactly_once<_Tp> && is_constructible_v<_Tp, initializer_list<_Up>&, _Args&&...>>>
+	constexpr explicit
+	variant(emplaced_type_t<_Tp>, initializer_list<_Up> __il, _Args&&... __args)
+	: variant(emplaced_index<tuple_find_v<_Tp, variant>>, __il, forward<_Args>(__args)...)
+	{ __glibcxx_assert(holds_alternative<_Tp>(*this)); }
 
+      template<size_t _Np, typename... _Args, typename = enable_if_t<_Np < sizeof...(_Types) && is_constructible_v<tuple_element_t<_Np, variant>, _Args&&...>>>
+	constexpr explicit
+	variant(emplaced_index_t<_Np>, _Args&&... __args)
+	: __detail::__variant::_Variant_base<_Types...>(make_tuple()),
+	_Enable_default_constructor<is_default_constructible_v<tuple_element_t<0, variant<_Types...>>>, variant<_Types...>>(make_tuple())
+	{
+	  new (this->_M_storage()) __storage_type<_Np>(forward<_Args>(__args)...);
+	  this->_M_index = _Np;
+	  __glibcxx_assert(index() == _Np);
+	}
+
+      template<size_t _Np, typename _Up, typename... _Args, typename = enable_if_t<_Np < sizeof...(_Types) && is_constructible_v<tuple_element_t<_Np, variant>, initializer_list<_Up>&, _Args&&...>>>
+	constexpr explicit
+	variant(emplaced_index_t<_Np>, initializer_list<_Up> __il, _Args&&... __args)
+	: variant(emplaced_index<_Np>, __il, forward<_Args>(__args)...)
+	{ __glibcxx_assert(index() == _Np); }
+
+      // TODO: Implement these
       template<typename _Alloc>
 	variant(allocator_arg_t, const _Alloc&);
       template<typename _Alloc>
@@ -309,27 +696,157 @@ namespace __detail
       template<typename _Alloc, size_t _Np, typename _Up, typename... _Args>
 	variant(allocator_arg_t, const _Alloc&, emplaced_index_t<_Np>, initializer_list<_Up>, _Args&&...);
 
-      ~variant();
+      ~variant() = default;
 
-      variant& operator=(const variant&);
-      variant& operator=(variant&&) noexcept(true);
+      variant& operator=(const variant&) = default;
+      variant& operator=(variant&&) noexcept(__and_<is_nothrow_move_constructible<_Types>..., is_nothrow_move_assignable<_Types>...>::value) = default;
 
-      template<typename _Tp> variant& operator=(_Tp&&) noexcept(true);
+      // TODO: ???
+      template<typename _Tp>
+	enable_if_t<__acceptable<_Tp&&> && !is_same_v<decay_t<_Tp>, variant>, variant&>
+	operator=(_Tp&& __rhs) noexcept(is_nothrow_assignable_v<__accepted_type<_Tp&&>, _Tp&&>
+					&& is_nothrow_constructible_v<__accepted_type<_Tp&&>, _Tp&&>)
+	{
+	  constexpr auto __index = __accepted_index<_Tp&&>;
+	  if (index() == __index)
+	    {
+	      *static_cast<__storage_type<__index>*>(this->_M_storage()) = forward<_Tp>(__rhs);
+	    }
+	  else
+	    {
+	      this->~variant();
+	      new (this) variant(emplaced_index<__index>, forward<_Tp>(__rhs));
+	    }
+	  __glibcxx_assert(holds_alternative<__accepted_type<_Tp&&>>(*this));
+	  return *this;
+	}
 
-      template<typename _Tp, typename... _Args> void emplace(_Args&&...);
+      template<typename _Tp, typename... _Args>
+	void emplace(_Args&&... __args)
+	{
+	  static_assert(__exactly_once<_Tp>, "T should occur for exactly once in alternatives");
+	  this->emplace<tuple_find_v<_Tp, variant>>(forward<_Args>(__args)...);
+	  __glibcxx_assert(holds_alternative<_Tp>(*this));
+	}
+
       template<typename _Tp, typename _Up, typename... _Args>
-	void emplace(initializer_list<_Up>, _Args&&...);
-      template<size_t _Np, typename... _Args> void emplace(_Args&&...);
+	void emplace(initializer_list<_Up> __il, _Args&&... __args)
+	{
+	  static_assert(__exactly_once<_Tp>, "T should occur for exactly once in alternatives");
+	  this->emplace<tuple_find_v<_Tp, variant>>(__il, forward<_Args>(__args)...);
+	  __glibcxx_assert(holds_alternative<_Tp>(*this));
+	}
+
+      template<size_t _Np, typename... _Args>
+	void emplace(_Args&&... __args)
+	{
+	  static_assert(_Np < sizeof...(_Types), "_Np should be in [0, number of alternatives)");
+	  this->~variant();
+	  new (this) variant(emplaced_index<_Np>, forward<_Args>(__args)...);
+	  __glibcxx_assert(index() == _Np);
+	}
+
       template<size_t _Np, typename _Up, typename... _Args>
-	void emplace(initializer_list<_Up>, _Args&&...);
+	void emplace(initializer_list<_Up> __il, _Args&&... __args)
+	{
+	  static_assert(_Np < sizeof...(_Types), "_Np should be in [0, number of alternatives)");
+	  this->~variant();
+	  new (this) variant(emplaced_index<_Np>, __il, forward<_Args>(__args)...);
+	  __glibcxx_assert(index() == _Np);
+	}
 
-      bool valueless_by_exception() const noexcept;
-      size_t index() const noexcept;
+      bool valueless_by_exception() const noexcept
+      { return !this->_M_valid(); }
 
-      void swap(variant&) noexcept(true);
+      size_t index() const noexcept
+      { return this->_M_index; }
 
-    private:
+      enable_if_t<__and_<__is_swappable_impl::__is_swappable<_Types>...>::value>
+      swap(variant& __rhs) noexcept(__and_<__is_nothrow_swappable<_Types>...>::value
+				    && is_nothrow_move_assignable_v<variant>)
+      {
+	if (this->index() == __rhs._M_index())
+	  {
+	    if (this->_M_valid())
+	      {
+		using __detail::__variant::_Create_alt_type;
+		static constexpr void (*_S_vtable[])(void*, void*) =
+		  { &__detail::__variant::__erased_swap<
+		      _Create_alt_type<int&, _Types>&,
+		      _Create_alt_type<int&, _Types>&>... };
+		_S_vtable[__rhs._M_index](this->_M_storage(), __rhs._M_storage());
+	      }
+	  }
+	else if (!this->_M_valid())
+	  {
+	    *this = std::move(__rhs);
+	  }
+	else if (!__rhs._M_valid())
+	  {
+	    __rhs = std::move(*this);
+	  }
+	else
+	  {
+	    auto __tmp = std::move(__rhs);
+	    __rhs = std::move(*this);
+	    *this = std::move(__tmp);
+	  }
+      }
+
+      template<typename _Vp> friend void* __detail::__variant::__get_storage(_Vp&& __v);
     };
+
+  template<size_t _Np, typename... _Types>
+    tuple_element_t<_Np, variant<_Types...>>&
+    get(variant<_Types...>& __v)
+    {
+      static_assert(_Np < sizeof...(_Types), "_Np should be in [0, number of alternatives)");
+      if (__v.index() != _Np)
+	__throw_bad_variant_access("Unexpected index");
+      return __detail::__variant::__access(__v);
+    }
+
+  template<size_t _Np, typename... _Types>
+    tuple_element_t<_Np, variant<_Types...>>&&
+    get(variant<_Types...>&& __v)
+    {
+      static_assert(_Np < sizeof...(_Types), "_Np should be in [0, number of alternatives)");
+      if (__v.index() != _Np)
+	__throw_bad_variant_access("Unexpected index");
+      return __detail::__variant::__access(std::move(__v));
+    }
+
+  template<size_t _Np, typename... _Types>
+    const tuple_element_t<_Np, variant<_Types...>>&
+    get(const variant<_Types...>& __v)
+    {
+      static_assert(_Np < sizeof...(_Types), "_Np should be in [0, number of alternatives)");
+      if (__v.index() != _Np)
+	__throw_bad_variant_access("Unexpected index");
+      return __detail::__variant::__access(__v);
+    }
+
+  template<size_t _Np, typename... _Types>
+    const tuple_element_t<_Np, variant<_Types...>>&&
+    get(const variant<_Types...>&& __v)
+    {
+      static_assert(_Np < sizeof...(_Types), "_Np should be in [0, number of alternatives)");
+      if (__v.index() != _Np)
+	__throw_bad_variant_access("Unexpected index");
+      return __detail::__variant::__access(std::move(__v));
+    }
+
+  template<typename _Visitor, typename... _Variants>
+    decltype(auto)
+    visit(_Visitor&& __visitor, _Variants&&... __variants)
+    {
+      using _Result_type = decltype(forward<_Visitor>(__visitor)(get<0>(__variants)...));
+      using _Func_ptr = _Result_type (*)(_Visitor&&, __detail::__variant::_To_type<_Variants, void*>...);
+      using _Array_trait = __detail::__variant::__array_traits<const _Func_ptr, sizeof...(_Variants)>;
+      constexpr static auto _S_vtable = __detail::__variant::__gen_vtable<_Result_type, _Visitor&&, _Variants&&...>();
+      _Func_ptr __func_ptr = _Array_trait::_S_access(&_S_vtable._M_data, __variants.index()...);
+      return (*__func_ptr)(forward<_Visitor>(__visitor), __detail::__variant::__get_storage(__variants)...);
+    }
 
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace fundamentals_v1

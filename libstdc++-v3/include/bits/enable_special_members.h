@@ -42,7 +42,21 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   * @sa _Enable_special_members
   */
 template<bool _Switch, typename _Tag = void>
-  struct _Enable_default_constructor { };
+  struct _Enable_default_constructor
+  {
+    constexpr _Enable_default_constructor() noexcept = default;
+    constexpr _Enable_default_constructor(_Enable_default_constructor const&)
+      noexcept  = default;
+    constexpr _Enable_default_constructor(_Enable_default_constructor&&)
+      noexcept = default;
+    _Enable_default_constructor&
+    operator=(_Enable_default_constructor const&) noexcept = default;
+    _Enable_default_constructor&
+    operator=(_Enable_default_constructor&&) noexcept = default;
+
+    // Can be used in other ctors.
+    explicit _Enable_default_constructor(tuple<>) { }
+  };
 
 
 /**
@@ -86,7 +100,20 @@ template<bool _Default, bool _Destructor,
 
 template<typename _Tag>
   struct _Enable_default_constructor<false, _Tag>
-  { constexpr _Enable_default_constructor() noexcept = delete; };
+  {
+    constexpr _Enable_default_constructor() noexcept = delete;
+    constexpr _Enable_default_constructor(_Enable_default_constructor const&)
+      noexcept  = default;
+    constexpr _Enable_default_constructor(_Enable_default_constructor&&)
+      noexcept = default;
+    _Enable_default_constructor&
+    operator=(_Enable_default_constructor const&) noexcept = default;
+    _Enable_default_constructor&
+    operator=(_Enable_default_constructor&&) noexcept = default;
+
+    // Can be used in other ctors.
+    explicit _Enable_default_constructor(tuple<>) { }
+  };
 
 template<typename _Tag>
   struct _Enable_destructor<false, _Tag>
