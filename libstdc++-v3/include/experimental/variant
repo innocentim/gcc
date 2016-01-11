@@ -101,24 +101,22 @@ namespace __variant
     struct __storage
     { using type = _Alternative; };
 
-  template<typename _Tp>
+  template<typename _Reference>
     struct _Reference_storage
     {
-      _Reference_storage(_Tp& __ref) : _M_storage(&__ref) { }
-      _Reference_storage(_Tp&& __ref) : _M_storage(&__ref) { }
+      static_assert(is_reference_v<_Reference>, "BUG: _Reference should be a reference");
 
-      operator _Tp&()
-      { return *_M_storage; }
+      _Reference_storage(_Reference __ref) : _M_storage(__ref) { }
 
-      operator _Tp&&()
-      { return std::move(*_M_storage); }
+      operator _Reference()
+      { return _M_storage; }
 
-      _Tp* _M_storage;
+      _Reference _M_storage;
     };
 
   template<typename _Alternative>
     struct __storage<_Alternative, enable_if_t<is_reference_v<_Alternative>>>
-    { using type = _Reference_storage<remove_reference_t<_Alternative>>; };
+    { using type = _Reference_storage<_Alternative>; };
 
   template<typename _Alternative>
     struct __storage<_Alternative, enable_if_t<is_void_v<_Alternative>>>
