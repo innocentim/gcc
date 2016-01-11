@@ -186,7 +186,8 @@ namespace __variant
 
       _Variant_base(tuple<>) noexcept : _M_index(tuple_not_found) { }
 
-      _Variant_base(const _Variant_base& __rhs) : _M_index(__rhs._M_index)
+      _Variant_base(const _Variant_base& __rhs) noexcept(__and_<is_nothrow_copy_constructible<_Types>...>::value)
+      : _M_index(__rhs._M_index)
       {
 	if (__rhs._M_valid())
 	  {
@@ -594,7 +595,8 @@ namespace __variant
   { return false; }
 
   template<typename... _Types>
-    void swap(variant<_Types...>& __lhs, variant<_Types...>& __rhs) noexcept(noexcept(__lhs.swap(__rhs)))
+    auto swap(variant<_Types...>& __lhs, variant<_Types...>& __rhs) noexcept(noexcept(__lhs.swap(__rhs)))
+    -> decltype(__lhs.swap(__rhs))
     { __lhs.swap(__rhs); }
 
   class bad_variant_access : public exception
@@ -646,7 +648,7 @@ namespace __variant
 
     public:
       constexpr variant() noexcept(is_nothrow_default_constructible_v<tuple_element_t<0, variant>>) = default;
-      variant(const variant&) = default;
+      variant(const variant&) noexcept(__and_<is_nothrow_copy_constructible<_Types>...>::value) = default;
       variant(variant&&) noexcept(__and_<is_nothrow_move_constructible<_Types>...>::value) = default;
 
       template<typename _Tp, typename = enable_if_t<__acceptable<_Tp&&> && __and_<is_move_constructible<_Types>...>::value>>
@@ -672,7 +674,7 @@ namespace __variant
 	constexpr explicit
 	variant(emplaced_index_t<_Np>, _Args&&... __args)
 	: __detail::__variant::_Variant_base<_Types...>(make_tuple()),
-	_Enable_default_constructor<is_default_constructible_v<tuple_element_t<0, variant<_Types...>>>, variant<_Types...>>(make_tuple())
+	_Enable_default_constructor<is_default_constructible_v<tuple_element_t<0, variant<_Types...>>>, variant<_Types...>>(_Enable_default_constructor_tag{})
 	{
 	  new (this->_M_storage()) __storage_type<_Np>(forward<_Args>(__args)...);
 	  this->_M_index = _Np;
@@ -768,7 +770,7 @@ namespace __variant
       size_t index() const noexcept
       { return this->_M_index; }
 
-      enable_if_t<__and_<__is_swappable_impl::__is_swappable<_Types>...>::value>
+      void
       swap(variant& __rhs) noexcept(__and_<__is_nothrow_swappable<_Types>...>::value
 				    && is_nothrow_move_assignable_v<variant>)
       {

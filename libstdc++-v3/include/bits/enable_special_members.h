@@ -36,6 +36,8 @@ namespace std _GLIBCXX_VISIBILITY(default)
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
+  struct _Enable_default_constructor_tag { };
+
 /**
   * @brief A mixin helper to conditionally enable or disable the default
   * constructor.
@@ -55,7 +57,7 @@ template<bool _Switch, typename _Tag = void>
     operator=(_Enable_default_constructor&&) noexcept = default;
 
     // Can be used in other ctors.
-    explicit _Enable_default_constructor(tuple<>) { }
+    explicit _Enable_default_constructor(_Enable_default_constructor_tag) { }
   };
 
 
@@ -112,7 +114,7 @@ template<typename _Tag>
     operator=(_Enable_default_constructor&&) noexcept = default;
 
     // Can be used in other ctors.
-    explicit _Enable_default_constructor(tuple<>) { }
+    explicit _Enable_default_constructor(_Enable_default_constructor_tag) { }
   };
 
 template<typename _Tag>
