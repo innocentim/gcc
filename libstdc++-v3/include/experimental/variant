@@ -83,8 +83,17 @@ namespace __variant
   template<typename _Ap, typename _Dp, typename _Sp>
     struct _Alternative
     {
+      static_assert(is_void_v<_Ap> || is_reference_v<_Dp>, "BUG: Desired type is designed to be a reference");
+      static_assert(!is_reference_v<_Sp>, "BUG: Storage type is never a reference");
+
+      // The alternative, e.g. int, char&&, const char&, void, etc.
       using _Alternative_type = _Ap;
+
+      // The type get<>() returns, e.g. int&, char& const char&, ??? for lvalue variant, respectively;
+      // and int&&, char&& const char&, ??? for rvalue variant, respectively.
       using _Desired_type = _Dp;
+
+      // The underlying storage type, e.g. int, _Reference_storage<char>, _Reference_storage<const char>, tuple<>, respectively.
       using _Stored_type = _Sp;
     };
 
@@ -172,7 +181,7 @@ namespace __variant
       _Variant_base() noexcept(is_nothrow_default_constructible_v<tuple_element_t<0, tuple<_Types...>>>) 
       : _M_index(0)
       {
-	new (_M_storage()) typename _Create_alt_type<int, tuple_element_t<0, tuple<_Types...>>>::_Stored_type();
+	new (_M_storage()) typename _Create_alt_type<int&, tuple_element_t<0, tuple<_Types...>>>::_Stored_type();
 	__glibcxx_assert(_M_valid());
 	__glibcxx_assert(_M_index == 0);
       }
@@ -262,7 +271,7 @@ namespace __variant
       _M_valid() const noexcept
       { return _M_index != tuple_not_found; }
 
-      std::aligned_union_t<0, typename _Create_alt_type<int, _Types>::_Stored_type...> _M_st;
+      std::aligned_union_t<0, typename _Create_alt_type<int&, _Types>::_Stored_type...> _M_st;
       size_t _M_index;
     };
 
@@ -635,7 +644,7 @@ namespace __variant
 	using __accepted_type = tuple_element_t<__accepted_index<_Tp>, variant>;
 
       template<size_t _Np>
-	using __storage_type = typename __detail::__variant::_Create_alt_type<int, tuple_element_t<_Np, variant>>::_Stored_type;
+	using __storage_type = typename __detail::__variant::_Create_alt_type<int&, tuple_element_t<_Np, variant>>::_Stored_type;
 
     public:
       constexpr variant() noexcept(is_nothrow_default_constructible_v<tuple_element_t<0, variant>>) = default;
