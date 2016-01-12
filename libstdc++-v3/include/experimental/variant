@@ -85,9 +85,9 @@ namespace __variant
     {
       static_assert(is_reference_v<_Reference>, "BUG: _Reference should be a reference");
 
-      _Reference_storage(_Reference __ref) : _M_storage(__ref) { }
+      _Reference_storage(_Reference __ref) noexcept : _M_storage(__ref) { }
 
-      operator _Reference()
+      operator _Reference() noexcept
       { return _M_storage; }
 
       _Reference _M_storage;
@@ -391,6 +391,7 @@ namespace __variant
       using _Func_ptr = _Result_type (*)(_Visitor, _To_type<_Variants, void*>...);
       using _Array_trait = __array_traits<_Func_ptr, sizeof...(_Variants)>;
       using _Vtable_type = typename _Array_trait::type;
+      // Going to return an array. Sorry it's hard.
       struct { _Vtable_type _M_data; } __vtable{};
       (void)__init_vtable<_Result_type, _Visitor, tuple<_Variants&&...>, _Vtable_type*>::_S_init(&__vtable._M_data);
       return __vtable;
