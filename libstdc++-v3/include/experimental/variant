@@ -405,8 +405,8 @@ namespace __variant
       static constexpr _Array_type
       _S_apply()
       {
-	_Array_type __vtable;
-	_S_apply_impl(__vtable, make_index_sequence<tuple_size_v<decay_t<_First>>>());
+	_Array_type __vtable{};
+	_S_apply_all_alts(__vtable, make_index_sequence<tuple_size_v<decay_t<_First>>>());
 	return __vtable;
       }
 
@@ -426,12 +426,12 @@ namespace __variant
 	}
     };
 
-  template<typename _Func_ptr, typename... _Args>
-    struct __gen_vtable_impl<_Func_ptr, tuple<>, tuple<_Args...>>
+  template<typename _Result_type, typename _Visitor, typename... _Args>
+    struct __gen_vtable_impl<_Multi_array<_Result_type (*)(_Visitor, _To_type<_Args, void*>...)>, tuple<>, tuple<_Args...>>
     {
-      static constexpr _Func_ptr
+      static constexpr auto
       _S_apply()
-      { return static_cast<_Func_ptr>(&__visit_invoke); }
+      { return _Multi_array<_Result_type (*)(_Visitor, _To_type<_Args, void*>...)>{&__visit_invoke<_Visitor, _Args...>}; }
     };
 
   template<typename _Result_type, typename _Visitor, typename... _Variants>
