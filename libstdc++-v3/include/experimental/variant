@@ -357,7 +357,7 @@ namespace __variant
     { static constexpr size_t value = tuple_not_found; };
 
   template<typename _Tp, typename... _Types>
-    struct __accepted_index<_Tp, variant<_Types...>, decltype(__overload_set<_Types...>::_S_fun(declval<decay_t<_Tp>>()))>
+    struct __accepted_index<_Tp, variant<_Types...>, decltype(__overload_set<_Types...>::_S_fun(declval<decay_t<_Tp>>()), declval<void>())>
     { static constexpr size_t value = sizeof...(_Types) - 1 - decltype(__overload_set<_Types...>::_S_fun(declval<decay_t<_Tp>>()))::value; };
 
   template<typename _Variant>
