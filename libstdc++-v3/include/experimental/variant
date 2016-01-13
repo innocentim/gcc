@@ -353,11 +353,11 @@ namespace __variant
     };
 
   template<typename _Tp, typename _Variant, typename = void>
-    struct __acceptable_type
+    struct __accepted_index
     { static constexpr size_t value = tuple_not_found; };
 
   template<typename _Tp, typename... _Types>
-    struct __acceptable_type<_Tp, variant<_Types...>>
+    struct __accepted_index<_Tp, variant<_Types...>, decltype(__overload_set<_Types...>::_S_fun(declval<decay_t<_Tp>>()))>
     { static constexpr size_t value = sizeof...(_Types) - 1 - decltype(__overload_set<_Types...>::_S_fun(declval<decay_t<_Tp>>()))::value; };
 
   template<typename _Variant>
@@ -693,7 +693,7 @@ namespace __variant
 	__exactly_once = __detail::__variant::__exactly_once<_Tp, _Types...>;
 
       template<typename _Tp>
-	static constexpr size_t __accepted_index = __detail::__variant::__acceptable_type<_Tp&&, variant>::value;
+	static constexpr size_t __accepted_index = __detail::__variant::__accepted_index<_Tp&&, variant>::value;
 
       template<typename _Tp>
 	static constexpr bool __acceptable = __accepted_index<_Tp> != tuple_not_found;
