@@ -38,6 +38,7 @@
 #include <experimental/tuple>
 #include <experimental/type_traits>
 #include <bits/enable_special_members.h>
+#include <bits/uses_allocator.h>
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {
@@ -48,6 +49,12 @@ inline namespace fundamentals_v1
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename... _Types> class variant;
+
+  template<size_t _Np>
+    struct emplaced_index_t { };
+
+  template<size_t _Np>
+    constexpr emplaced_index_t<_Np> emplaced_index{};
 
 namespace __detail
 {
@@ -140,6 +147,11 @@ namespace __variant
     __erased_ctor(void* __lhs, void* __rhs)
     { new (__lhs) remove_reference_t<_Lhs>(__get_alternative<_Rhs>(__rhs)); }
 
+  template<typename _Alloc, typename _Lhs, typename _Rhs>
+    constexpr void
+    __erased_use_alloc_ctor(const _Alloc& __a, void* __lhs, void* __rhs)
+    { __uses_allocator_construct(__a, static_cast<remove_reference_t<_Lhs>*>(__lhs), __get_alternative<_Rhs>(__rhs)); }
+
   template<typename _Tp>
     constexpr void
     __erased_dtor(void* __ptr)
@@ -176,14 +188,7 @@ namespace __variant
     {
       constexpr
       _Variant_base() noexcept(is_nothrow_default_constructible_v<tuple_element_t<0, tuple<_Types...>>>) 
-      : _M_index(0)
-      {
-	new (_M_storage()) __storage<tuple_element_t<0, tuple<_Types...>>>();
-	__glibcxx_assert(_M_valid());
-	__glibcxx_assert(_M_index == 0);
-      }
-
-      _Variant_base(tuple<>) noexcept : _M_index(tuple_not_found) { }
+      : _Variant_base(emplaced_index<0>) { }
 
       _Variant_base(const _Variant_base& __rhs) noexcept(__and_<is_nothrow_copy_constructible<_Types>...>::value)
       : _M_index(__rhs._M_index)
@@ -207,6 +212,50 @@ namespace __variant
 	  }
       }
 
+      template<size_t _Np, typename... _Args>
+	constexpr explicit
+	_Variant_base(emplaced_index_t<_Np>, _Args&&... __args)
+	{
+	  using _Storage = __storage<tuple_element_t<_Np, tuple<_Types...>>>;
+	  new (_M_storage()) _Storage(forward<_Args>(__args)...);
+	  this->_M_index = _Np;
+	  __glibcxx_assert(index() == _Np);
+	}
+
+      template<typename _Alloc>
+	_Variant_base(const _Alloc __a, const _Variant_base& __rhs)
+	: _M_index(__rhs._M_index)
+	{
+	  if (__rhs._M_valid())
+	    {
+	      static constexpr void (*_S_vtable[])(const _Alloc&, void*, void*) =
+		{ &__erased_use_alloc_ctor<_Alloc, __storage<_Types>&, const __storage<_Types>&>... };
+	      _S_vtable[__rhs._M_index](_M_storage(), __rhs._M_storage());
+	    }
+	}
+
+      template<typename _Alloc>
+	_Variant_base(const _Alloc __a, _Variant_base&& __rhs)
+	: _M_index(__rhs._M_index)
+	{
+	  if (__rhs._M_valid())
+	    {
+	      static constexpr void (*_S_vtable[])(const _Alloc&, void*, void*) =
+		{ &__erased_use_alloc_ctor<_Alloc, __storage<_Types>&, __storage<_Types>&&>... };
+	      _S_vtable[__rhs._M_index](_M_storage(), __rhs._M_storage());
+	    }
+	}
+
+      template<typename _Alloc, size_t _Np, typename... _Args>
+	constexpr explicit
+	_Variant_base(const _Alloc& __a, emplaced_index_t<_Np>, _Args&&... __args)
+	{
+	  using _Storage = __storage<tuple_element_t<_Np, tuple<_Types...>>>;
+	  __uses_allocator_construct(__a, static_cast<_Storage*>(_M_storage()), forward<_Args>(__args)...);
+	  this->_M_index = _Np;
+	  __glibcxx_assert(index() == _Np);
+	}
+
       ~_Variant_base()
       {
 	if (_M_valid())
@@ -214,6 +263,10 @@ namespace __variant
 	    static constexpr void (*_S_vtable[])(void*) =
 	      { &__erased_dtor<__storage<_Types>&>... };
 	    _S_vtable[_M_index](_M_storage());
+	  }
+	else
+	  {
+	    _M_index = tuple_not_found;
 	  }
       }
 
@@ -404,11 +457,6 @@ namespace __variant
     struct emplaced_type_t { };
   template<typename _Tp>
     constexpr emplaced_type_t<_Tp> emplaced_type{};
-
-  template<size_t _Np>
-    struct emplaced_index_t { };
-  template<size_t _Np>
-    constexpr emplaced_index_t<_Np> emplaced_index{};
 
   template<typename... _Types>
     struct tuple_size<variant<_Types...>> : tuple_size<tuple<_Types...>> { };
@@ -636,6 +684,10 @@ namespace __variant
 	  variant<_Types...>>
     {
     private:
+      using _Base = __detail::__variant::_Variant_base<_Types...>;
+
+      using _Default_ctor_enabler = _Enable_default_constructor<is_default_constructible_v<tuple_element_t<0, variant<_Types...>>>, variant<_Types...>>;
+
       template<typename _Tp>
 	static constexpr bool
 	__exactly_once = __detail::__variant::__exactly_once<_Tp, _Types...>;
@@ -683,13 +735,8 @@ namespace __variant
       template<size_t _Np, typename... _Args, typename = enable_if_t<_Np < sizeof...(_Types) && is_constructible_v<__to_type<_Np>, _Args&&...>>>
 	constexpr explicit
 	variant(emplaced_index_t<_Np>, _Args&&... __args)
-	: __detail::__variant::_Variant_base<_Types...>(make_tuple()),
-	_Enable_default_constructor<is_default_constructible_v<__to_type<0>>, variant<_Types...>>(_Enable_default_constructor_tag{})
-	{
-	  new (this->_M_storage()) __storage<__to_type<_Np>>(forward<_Args>(__args)...);
-	  this->_M_index = _Np;
-	  __glibcxx_assert(index() == _Np);
-	}
+	: _Base(emplaced_index<_Np>, forward<_Args>(__args)...), _Default_ctor_enabler(_Enable_default_constructor_tag{})
+	{ __glibcxx_assert(index() == _Np); }
 
       template<size_t _Np, typename _Up, typename... _Args, typename = enable_if_t<_Np < sizeof...(_Types) && is_constructible_v<__to_type<_Np>, initializer_list<_Up>&, _Args&&...>>>
 	constexpr explicit
@@ -697,23 +744,53 @@ namespace __variant
 	: variant(emplaced_index<_Np>, __il, forward<_Args>(__args)...)
 	{ __glibcxx_assert(index() == _Np); }
 
-      // TODO: Implement these
-      template<typename _Alloc>
-	variant(allocator_arg_t, const _Alloc&);
-      template<typename _Alloc>
-	variant(allocator_arg_t, const _Alloc& a, const variant&);
-      template<typename _Alloc>
-	variant(allocator_arg_t, const _Alloc& a, variant&&);
-      template<typename _Alloc, typename _Tp>
-	variant(allocator_arg_t, const _Alloc&, _Tp&&);
-      template<typename _Alloc, typename _Tp, typename... _Args>
-	variant(allocator_arg_t, const _Alloc&, emplaced_type_t<_Tp>, _Args&&...);
-      template<typename _Alloc, typename _Tp, typename _Up, typename... _Args>
-	variant(allocator_arg_t, const _Alloc&, emplaced_type_t<_Tp>, initializer_list<_Up>, _Args&&...);
-      template<typename _Alloc, size_t _Np, typename... _Args>
-	variant(allocator_arg_t, const _Alloc&, emplaced_index_t<_Np>, _Args&&...);
-      template<typename _Alloc, size_t _Np, typename _Up, typename... _Args>
-	variant(allocator_arg_t, const _Alloc&, emplaced_index_t<_Np>, initializer_list<_Up>, _Args&&...);
+      // Alloc versions.
+      template<typename _Alloc, typename = enable_if_t<__is_uses_allocator_constructible_v<__to_type<0>, _Alloc>>>
+	constexpr variant(allocator_arg_t, const _Alloc& __a) noexcept(__is_nothrow_uses_allocator_constructible_v<__to_type<0>, _Alloc>)
+	: variant(allocator_arg, __a, emplaced_index<0>)
+	{ }
+
+      template<typename _Alloc, typename = enable_if_t<__and_<__is_uses_allocator_constructible<_Types, _Alloc, const _Types&>...>::value>>
+	variant(allocator_arg_t, const _Alloc& __a, const variant& __rhs) noexcept(__and_<__is_uses_allocator_constructible<_Types, _Alloc, const _Types&>...>::value)
+	: _Base(__a, __rhs), _Default_ctor_enabler(_Enable_default_constructor_tag{})
+	{ }
+
+      template<typename _Alloc, typename = enable_if_t<__and_<__is_uses_allocator_constructible<_Types, _Alloc, _Types&&>...>::value>>
+	variant(allocator_arg_t, const _Alloc& __a, variant&& __rhs) noexcept(__and_<__is_uses_allocator_constructible<_Types, _Alloc, _Types&&>...>::value)
+	: _Base(__a, std::move(__rhs)), _Default_ctor_enabler(_Enable_default_constructor_tag{})
+	{ }
+
+      template<typename _Alloc, typename _Tp, typename = enable_if_t<__acceptable<_Tp&&> && !is_same_v<decay_t<_Tp>, variant>, variant&>>
+	constexpr
+	variant(allocator_arg_t, const _Alloc& __a, _Tp&& __t) noexcept(__is_nothrow_uses_allocator_constructible_v<__accepted_type<_Tp&&>, _Tp&&>)
+	: variant(allocator_arg, __a, emplaced_index<__accepted_index<_Tp&&>>, forward<_Tp>(__t))
+	{ __glibcxx_assert(holds_alternative<__accepted_type<_Tp&&>>(*this)); }
+
+      template<typename _Alloc, typename _Tp, typename... _Args, typename = enable_if_t<__exactly_once<_Tp> && __is_uses_allocator_constructible_v<_Tp, _Args&&...>>>
+	constexpr explicit
+	variant(allocator_arg_t, const _Alloc& __a, emplaced_type_t<_Tp>, _Args&&... __args)
+	: variant(allocator_arg, __a, emplaced_index<tuple_find_v<_Tp, variant>>, forward<_Args>(__args)...)
+	{ __glibcxx_assert(holds_alternative<_Tp>(*this)); }
+
+      template<typename _Alloc, typename _Tp, typename _Up, typename... _Args,
+	       typename = enable_if_t<__exactly_once<_Tp> && __is_uses_allocator_constructible_v<_Tp, initializer_list<_Up>&, _Args&&...>>>
+	constexpr explicit
+	variant(allocator_arg_t, const _Alloc& __a, emplaced_type_t<_Tp>, initializer_list<_Up> __il, _Args&&... __args)
+	: variant(allocator_arg, __a, emplaced_index<tuple_find_v<_Tp, variant>>, __il, forward<_Args>(__args)...)
+	{ __glibcxx_assert(holds_alternative<_Tp>(*this)); }
+
+      template<typename _Alloc, size_t _Np, typename... _Args, typename = enable_if_t<_Np < sizeof...(_Types) && __is_uses_allocator_constructible_v<__to_type<_Np>, _Args&&...>>>
+	constexpr explicit
+	variant(allocator_arg_t, const _Alloc& __a, emplaced_index_t<_Np>, _Args&&... __args)
+	: _Base(__a, emplaced_index<_Np>, forward<_Args>(__args)...), _Default_ctor_enabler(_Enable_default_constructor_tag{})
+	{ __glibcxx_assert(index() == _Np); }
+
+      template<typename _Alloc, size_t _Np, typename _Up, typename... _Args, typename = enable_if_t<_Np < sizeof...(_Types) && __is_uses_allocator_constructible_v<__to_type<_Np>, initializer_list<_Up>&, _Args&&...>>>
+	constexpr explicit
+	variant(allocator_arg_t, const _Alloc& __a, emplaced_index_t<_Np>, initializer_list<_Up> __il, _Args&&... __args)
+	: variant(allocator_arg, __a, emplaced_index<_Np>, __il, forward<_Args>(__args)...)
+	{ __glibcxx_assert(index() == _Np); }
+      // End Alloc
 
       ~variant() = default;
 
@@ -862,6 +939,9 @@ namespace __variant
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace fundamentals_v1
 } // namespace experimental
+
+  template<typename... _Types, typename _Alloc>
+    struct uses_allocator<experimental::variant<_Types...>, _Alloc> : true_type { };
 
   template<typename _Tp> struct hash;
   template<typename... _Types> struct hash<experimental::variant<_Types...>>;
