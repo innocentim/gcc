@@ -183,6 +183,11 @@ namespace __variant
     __erased_less_than(void* __lhs, void* __rhs)
     { return __get_alternative<_Lhs>(__lhs) < __get_alternative<_Rhs>(__rhs); }
 
+  template<typename _Tp>
+    constexpr size_t
+    __erased_hash(void* __t)
+    { return std::hash<decay_t<_Tp>>{}(__get_alternative<_Tp>(__t)); }
+
   template<typename... _Types>
     struct _Variant_base
     {
@@ -936,9 +941,44 @@ _GLIBCXX_END_NAMESPACE_VERSION
   template<typename... _Types, typename _Alloc>
     struct uses_allocator<experimental::variant<_Types...>, _Alloc> : true_type { };
 
-  template<typename _Tp> struct hash;
-  template<typename... _Types> struct hash<experimental::variant<_Types...>>;
-  template<> struct hash<experimental::monostate>;
+  template <typename> struct hash;
+
+  template<typename... _Types>
+    struct hash<experimental::variant<_Types...>>
+    {
+      using result_type = size_t;
+      using argument_type = experimental::variant<_Types...>;
+
+      size_t
+      operator()(const experimental::variant<_Types...>& __t) const
+      noexcept(std::min<bool>({noexcept(hash<decay_t<_Types>>{}(declval<_Types>()))}...))
+      {
+	if (!__t.valueless_by_exception())
+	  {
+	    namespace __edv = experimental::__detail::__variant;
+	    static constexpr size_t (*_S_vtable[])(void*) =
+	      { &__edv::__erased_hash<const __edv::__storage<_Types>&>... };
+	    return hash<size_t>{}(__t.index()) + _S_vtable[__t.index()](__edv::__get_storage(__t));
+	  }
+	return hash<size_t>{}(__t.index());
+      }
+    };
+
+  template<>
+    struct hash<experimental::monostate>
+    {
+      using result_type = size_t;
+      using argument_type = experimental::monostate;
+
+      size_t
+      operator()(const experimental::monostate& __t) const noexcept
+      {
+	constexpr size_t __magic_monostate_hash = static_cast<size_t>(-7777);
+	return static_cast<size_t>(__magic_monostate_hash);
+      }
+    };
+
+
 } // namespace std
 
 #endif // C++14
