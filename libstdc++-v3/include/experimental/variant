@@ -375,80 +375,75 @@ namespace __variant
     decltype(auto) __visit_invoke(_Visitor&& __visitor, _To_type<_Args, void*>... __ptrs)
     { return forward<_Visitor>(__visitor)(__get_alternative<_Args>(__ptrs)...); }
 
-  template<typename _Result_type, typename _Visitor, typename _Variant_tuple, typename _Table_ptr, typename... _Args>
-    struct __init_vtable
+  template<typename _Tp, size_t... _Dimensions>
+    struct _Multi_array
     {
-      constexpr static
-      tuple<>
-      _S_init(_Table_ptr __table_ptr)
-      {
-	return _S_init_all_alternatives(__table_ptr, make_index_sequence<tuple_size_v<decay_t<tuple_element_t<sizeof...(_Args), _Variant_tuple>>>>());
-      }
+      constexpr const _Tp&
+      _M_access() const
+      { return _M_data; }
 
-      template<size_t... __indices>
-	constexpr static tuple<>
-	_S_init_all_alternatives(_Table_ptr __table_ptr, index_sequence<__indices...>)
-	{
-	  return tuple_cat(_S_init_single_alternative<__indices>(__table_ptr)...);
-	}
-
-      template<size_t __index>
-	constexpr static tuple<>
-	_S_init_single_alternative(_Table_ptr __table_ptr)
-	{
-	  using _Qualified_variant = tuple_element_t<sizeof...(_Args), _Variant_tuple>;
-	  using _Alternative = tuple_element_t<__index, decay_t<_Qualified_variant>>;
-	  using _Qualified_storage = __reserved_type_map<_Qualified_variant, __storage<_Alternative>>;
-	  return __init_vtable<_Result_type, _Visitor, _Variant_tuple, remove_reference_t<decltype(**__table_ptr)>*, _Args..., _Qualified_storage>::_S_init(&(*__table_ptr)[__index]);
-	}
-    };
-
-  template<typename _Result_type, typename _Visitor, typename _Variant_tuple, typename... _Args>
-    struct __init_vtable<_Result_type, _Visitor, _Variant_tuple, _Result_type (**)(_Visitor, _To_type<_Args, void*>...), _Args...>
-    {
-      constexpr static
-      tuple<>
-      _S_init(_Result_type (**entry)(_Visitor, _To_type<_Args, void*>...))
-      {
-	static_assert(is_same<_Result_type, decltype(__visit_invoke<_Visitor, _Args...>(declval<_Visitor>(), declval<_To_type<_Args, void*>>()...))>::value,
-		      "All branches of _Visitor should return the same type");
-	*entry = &__visit_invoke<_Visitor, _Args...>;
-	return {};
-      }
-    };
-
-  template<typename _Tp, size_t... __dimensions>
-    struct __array_traits
-    {
-      using type = _Tp;
-
-      constexpr static _Tp&
-      _S_access(type* __ptr)
-      { return *__ptr; }
+      _Tp _M_data;
     };
 
   template<typename _Tp, size_t __first, size_t... __rest>
-    struct __array_traits<_Tp, __first, __rest...>
+    struct _Multi_array<_Tp, __first, __rest...>
     {
-      using type = typename __array_traits<_Tp, __rest...>::type[__first];
+      template<typename... _Args>
+	constexpr const _Tp&
+	_M_access(size_t __first_index, _Args... __rest_indices) const
+	{ return _M_arr[__first_index]._M_access(__rest_indices...); }
 
-      constexpr static _Tp&
-      _S_access(type* __ptr, size_t __index, decay_t<decltype(__rest)>... __indices)
-      { return __array_traits<_Tp, __rest...>::_S_access(&(*__ptr)[__index], __indices...); }
+      _Multi_array<_Tp, __rest...> _M_arr[__first];
+    };
+
+  template<typename _Array_type, typename _Variant_tuple, typename _Arg_tuple>
+    struct __gen_vtable_impl;
+
+  template<typename _Array_type, typename _First, typename... _Rest, typename... _Args>
+    struct __gen_vtable_impl<_Array_type, tuple<_First, _Rest...>, tuple<_Args...>>
+    {
+      static constexpr _Array_type
+      _S_apply()
+      {
+	_Array_type __vtable;
+	_S_apply_impl(__vtable, make_index_sequence<tuple_size_v<decay_t<_First>>>());
+	return __vtable;
+      }
+
+      template<size_t... __indices>
+	static constexpr void
+	_S_apply_all_alts(_Array_type& __vtable, index_sequence<__indices...>)
+	{ tuple_cat(_S_apply_single_alt<__indices>(__vtable._M_arr[__indices])...); }
+
+      template<size_t __index>
+	static constexpr tuple<>
+	_S_apply_single_alt(auto& __element)
+	{
+	  using _Alternative = tuple_element_t<__index, decay_t<_First>>;
+	  using _Qualified_storage = __reserved_type_map<_First, __storage<_Alternative>>;
+	  __element = __gen_vtable_impl<decay_t<decltype(__element)>, tuple<_Rest...>, tuple<_Args..., _Qualified_storage>>::_S_apply();
+	  return {};
+	}
+    };
+
+  template<typename _Func_ptr, typename... _Args>
+    struct __gen_vtable_impl<_Func_ptr, tuple<>, tuple<_Args...>>
+    {
+      static constexpr _Func_ptr
+      _S_apply()
+      { return static_cast<_Func_ptr>(&__visit_invoke); }
     };
 
   template<typename _Result_type, typename _Visitor, typename... _Variants>
-    constexpr auto
-    __gen_vtable()
+    struct __gen_vtable
     {
-      using _Func_ptr = _Result_type (*)(_Visitor, _To_type<_Variants, void*>...);
-      using _Array_trait = __array_traits<_Func_ptr, sizeof...(_Variants)>;
-      using _Vtable_type = typename _Array_trait::type;
-      // Going to return an array. Sorry it's hard.
-      struct { _Vtable_type _M_data; } __vtable{};
-      (void)__init_vtable<_Result_type, _Visitor, tuple<_Variants&&...>, _Vtable_type*>::_S_init(&__vtable._M_data);
-      return __vtable;
-    }
+      using _Func_ptr = _Result_type (*)(_Visitor&&, _To_type<_Variants, void*>...);
+      using _Array_type = _Multi_array<_Func_ptr, tuple_size_v<decay_t<_Variants>>...>;
+
+      static constexpr _Array_type
+      _S_apply()
+      { return __gen_vtable_impl<_Array_type, tuple<_Variants...>, tuple<>>::_S_apply(); }
+    };
 
 } // namespace __variant
 } // namespace __detail
@@ -929,10 +924,8 @@ namespace __variant
     visit(_Visitor&& __visitor, _Variants&&... __variants)
     {
       using _Result_type = decltype(forward<_Visitor>(__visitor)(get<0>(__variants)...));
-      using _Func_ptr = _Result_type (*)(_Visitor&&, __detail::__variant::_To_type<_Variants, void*>...);
-      using _Array_trait = __detail::__variant::__array_traits<const _Func_ptr, sizeof...(_Variants)>;
-      constexpr static auto _S_vtable = __detail::__variant::__gen_vtable<_Result_type, _Visitor&&, _Variants&&...>();
-      _Func_ptr __func_ptr = _Array_trait::_S_access(&_S_vtable._M_data, __variants.index()...);
+      constexpr static auto _S_vtable = __detail::__variant::__gen_vtable<_Result_type, _Visitor&&, _Variants&&...>::_S_apply();
+      auto __func_ptr = _S_vtable._M_access(__variants.index()...);
       return (*__func_ptr)(forward<_Visitor>(__visitor), __detail::__variant::__get_storage(__variants)...);
     }
 
