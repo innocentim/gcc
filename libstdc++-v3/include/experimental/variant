@@ -35,7 +35,7 @@
 # include <bits/c++14_warning.h>
 #else
 
-#include <experimental/tuple>
+#include <tuple>
 #include <experimental/type_traits>
 #include <bits/enable_special_members.h>
 #include <bits/uses_allocator.h>
@@ -51,15 +51,58 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename... _Types> class variant;
 
   template<size_t _Np>
-    struct emplaced_index_t { };
+    struct in_place_index_t { explicit in_place_index_t() = default; };
 
   template<size_t _Np>
-    constexpr emplaced_index_t<_Np> emplaced_index{};
+    constexpr in_place_index_t<_Np> in_place_index{};
+
+  template<typename _Variant>
+    struct variant_size;
+
+  template<typename _Variant>
+    struct variant_size<const _Variant> : variant_size<_Variant> {};
+
+  template<typename _Variant>
+    struct variant_size<volatile _Variant> : variant_size<_Variant> {};
+
+  template<typename _Variant>
+    struct variant_size<const volatile _Variant> : variant_size<_Variant> {};
+
+  template<typename... _Types>
+    struct variant_size<variant<_Types...>> : std::integral_constant<size_t, sizeof...(_Types)> {};
+
+  template<typename _Variant>
+    static constexpr size_t variant_size_v = variant_size<_Variant>::value;
+
+  template<size_t _Np, typename _Variant>
+    struct variant_alternative;
+
+  template<size_t _Np, typename _First, typename... _Rest>
+    struct variant_alternative<_Np, variant<_First, _Rest...>> : variant_alternative<_Np-1, variant<_Rest...>> {};
+
+  template<typename _First, typename... _Rest>
+    struct variant_alternative<0, variant<_First, _Rest...>>
+    { using type = _First; };
+
+  template<size_t _Np, typename _Variant>
+    using variant_alternative_t = typename variant_alternative<_Np, _Variant>::type;
+
+  static constexpr size_t variant_npos = -1;
 
 namespace __detail
 {
 namespace __variant
 {
+  template<typename _Tp, typename... _Types>
+    struct __index_of : std::integral_constant<size_t, 0> {};
+
+  template<typename _Tp, typename... _Types>
+    static constexpr size_t __index_of_v = __index_of<_Tp, _Types...>::value;
+
+  template<typename _Tp, typename _First, typename... _Rest>
+    struct __index_of<_Tp, _First, _Rest...> :
+      std::integral_constant<size_t, is_same_v<_Tp, _First> ? 0 : __index_of_v<_Tp, _Rest...> + 1> {};
+
   template<typename _From, typename _To>
     struct __reserved_type_map_impl
     { using type = _To; };
@@ -192,10 +235,10 @@ namespace __variant
     struct _Variant_base
     {
       constexpr
-      _Variant_base() noexcept(is_nothrow_default_constructible_v<tuple_element_t<0, tuple<_Types...>>>) 
-      : _Variant_base(emplaced_index<0>) { }
+      _Variant_base() noexcept(is_nothrow_default_constructible_v<variant_alternative_t<0, variant<_Types...>>>)
+      : _Variant_base(in_place_index<0>) { }
 
-      _Variant_base(const _Variant_base& __rhs) noexcept(__and_<is_nothrow_copy_constructible<_Types>...>::value)
+      _Variant_base(const _Variant_base& __rhs)
       : _M_index(__rhs._M_index)
       {
 	if (__rhs._M_valid())
@@ -219,9 +262,9 @@ namespace __variant
 
       template<size_t _Np, typename... _Args>
 	constexpr explicit
-	_Variant_base(emplaced_index_t<_Np>, _Args&&... __args)
+	_Variant_base(in_place_index_t<_Np>, _Args&&... __args)
 	{
-	  using _Storage = __storage<tuple_element_t<_Np, tuple<_Types...>>>;
+	  using _Storage = __storage<variant_alternative_t<_Np, variant<_Types...>>>;
 	  new (_M_storage()) _Storage(forward<_Args>(__args)...);
 	  this->_M_index = _Np;
 	  __glibcxx_assert(index() == _Np);
@@ -253,9 +296,9 @@ namespace __variant
 
       template<typename _Alloc, size_t _Np, typename... _Args>
 	constexpr explicit
-	_Variant_base(const _Alloc& __a, emplaced_index_t<_Np>, _Args&&... __args)
+	_Variant_base(const _Alloc& __a, in_place_index_t<_Np>, _Args&&... __args)
 	{
-	  using _Storage = __storage<tuple_element_t<_Np, tuple<_Types...>>>;
+	  using _Storage = __storage<variant_alternative_t<_Np, variant<_Types...>>>;
 	  __uses_allocator_construct(__a, static_cast<_Storage*>(_M_storage()), forward<_Args>(__args)...);
 	  this->_M_index = _Np;
 	  __glibcxx_assert(index() == _Np);
@@ -271,7 +314,7 @@ namespace __variant
 	  }
 	else
 	  {
-	    _M_index = tuple_not_found;
+	    _M_index = variant_npos;
 	  }
       }
 
@@ -325,7 +368,7 @@ namespace __variant
 
       constexpr bool
       _M_valid() const noexcept
-      { return _M_index != tuple_not_found; }
+      { return _M_index != variant_npos; }
 
       std::aligned_union_t<0, __storage<_Types>...> _M_st;
       size_t _M_index;
@@ -359,7 +402,7 @@ namespace __variant
 
   template<typename _Tp, typename _Variant, typename = void>
     struct __accepted_index
-    { static constexpr size_t value = tuple_not_found; };
+    { static constexpr size_t value = variant_npos; };
 
   template<typename _Tp, typename... _Types>
     struct __accepted_index<_Tp, variant<_Types...>, decltype(__overload_set<_Types...>::_S_fun(declval<decay_t<_Tp>>()), declval<void>())>
@@ -411,7 +454,7 @@ namespace __variant
       _S_apply()
       {
 	_Array_type __vtable{};
-	_S_apply_all_alts(__vtable, make_index_sequence<tuple_size_v<decay_t<_First>>>());
+	_S_apply_all_alts(__vtable, make_index_sequence<variant_size_v<decay_t<_First>>>());
 	return __vtable;
       }
 
@@ -424,7 +467,7 @@ namespace __variant
 	static constexpr tuple<>
 	_S_apply_single_alt(auto& __element)
 	{
-	  using _Alternative = tuple_element_t<__index, decay_t<_First>>;
+	  using _Alternative = variant_alternative_t<__index, decay_t<_First>>;
 	  using _Qualified_storage = __reserved_type_map<_First, __storage<_Alternative>>;
 	  __element = __gen_vtable_impl<decay_t<decltype(__element)>, tuple<_Rest...>, tuple<_Args..., _Qualified_storage>>::_S_apply();
 	  return {};
@@ -443,7 +486,7 @@ namespace __variant
     struct __gen_vtable
     {
       using _Func_ptr = _Result_type (*)(_Visitor&&, _To_type<_Variants, void*>...);
-      using _Array_type = _Multi_array<_Func_ptr, tuple_size_v<decay_t<_Variants>>...>;
+      using _Array_type = _Multi_array<_Func_ptr, variant_size_v<decay_t<_Variants>>...>;
 
       static constexpr _Array_type
       _S_apply()
@@ -454,41 +497,32 @@ namespace __variant
 } // namespace __detail
 
   template<typename _Tp>
-    struct emplaced_type_t { };
+    struct in_place_type_t { explicit in_place_type_t() = default; };
   template<typename _Tp>
-    constexpr emplaced_type_t<_Tp> emplaced_type{};
-
-  template<typename... _Types>
-    struct tuple_size<variant<_Types...>> : tuple_size<tuple<_Types...>> { };
-
-  template<size_t _Np, typename... _Types>
-    struct tuple_element<_Np, variant<_Types...>> : tuple_element<_Np, tuple<_Types...>> { };
-
-  template<typename _Tp, typename... _Types>
-    struct tuple_find<_Tp, variant<_Types...>> : tuple_find<_Tp, tuple<_Types...>> { };
+    constexpr in_place_type_t<_Tp> in_place_type{};
 
   template<typename _Tp, typename... _Types>
     bool holds_alternative(const variant<_Types...>& __v) noexcept
     {
       static_assert(__detail::__variant::__exactly_once<_Tp, _Types...>,
 		    "T should occur for exactly once in alternatives");
-      return __v.index() == tuple_find_v<_Tp, variant<_Types...>>;
+      return __v.index() == __detail::__variant::__index_of_v<_Tp, _Types...>;
     }
 
   template<size_t _Np, typename... _Types>
-    tuple_element_t<_Np, variant<_Types...>>&
+    variant_alternative_t<_Np, variant<_Types...>>&
     get(variant<_Types...>&);
 
   template<size_t _Np, typename... _Types>
-    tuple_element_t<_Np, variant<_Types...>>&&
+    variant_alternative_t<_Np, variant<_Types...>>&&
     get(variant<_Types...>&&);
 
   template<size_t _Np, typename... _Types>
-    const tuple_element_t<_Np, variant<_Types...>>&
+    const variant_alternative_t<_Np, variant<_Types...>>&
     get(const variant<_Types...>&);
 
   template<size_t _Np, typename... _Types>
-    const tuple_element_t<_Np, variant<_Types...>>&&
+    const variant_alternative_t<_Np, variant<_Types...>>&&
     get(const variant<_Types...>&&);
 
   template<typename _Tp, typename... _Types>
@@ -497,7 +531,7 @@ namespace __variant
       static_assert(__detail::__variant::__exactly_once<_Tp, _Types...>,
 		    "T should occur for exactly once in alternatives");
       static_assert(!is_void_v<_Tp>, "_Tp should not be void");
-      return get<tuple_find_v<_Tp, variant<_Types...>>>(__v);
+      return get<__detail::__variant::__index_of_v<_Tp, _Types...>>(__v);
     }
 
   template<typename _Tp, typename... _Types>
@@ -506,7 +540,7 @@ namespace __variant
       static_assert(__detail::__variant::__exactly_once<_Tp, _Types...>,
 		    "T should occur for exactly once in alternatives");
       static_assert(!is_void_v<_Tp>, "_Tp should not be void");
-      return get<tuple_find_v<_Tp, variant<_Types...>>>(std::move(__v));
+      return get<__detail::__variant::__index_of_v<_Tp, _Types...>>(std::move(__v));
     }
 
   template<typename _Tp, typename... _Types>
@@ -515,7 +549,7 @@ namespace __variant
       static_assert(__detail::__variant::__exactly_once<_Tp, _Types...>,
 		    "T should occur for exactly once in alternatives");
       static_assert(!is_void_v<_Tp>, "_Tp should not be void");
-      return get<tuple_find_v<_Tp, variant<_Types...>>>(__v);
+      return get<__detail::__variant::__index_of_v<_Tp, _Types...>>(__v);
     }
 
   template<typename _Tp, typename... _Types>
@@ -524,26 +558,26 @@ namespace __variant
       static_assert(__detail::__variant::__exactly_once<_Tp, _Types...>,
 		    "T should occur for exactly once in alternatives");
       static_assert(!is_void_v<_Tp>, "_Tp should not be void");
-      return get<tuple_find_v<_Tp, variant<_Types...>>>(std::move(__v));
+      return get<__detail::__variant::__index_of_v<_Tp, _Types...>>(std::move(__v));
     }
 
   template<size_t _Np, typename... _Types>
-    add_pointer_t<tuple_element_t<_Np, variant<_Types...>>>
+    add_pointer_t<variant_alternative_t<_Np, variant<_Types...>>>
     get_if(variant<_Types...>* __ptr) noexcept
     {
       static_assert(_Np < sizeof...(_Types), "_Np should be in [0, number of alternatives)");
-      static_assert(!is_void_v<tuple_element_t<_Np, variant<_Types...>>>, "_Tp should not be void");
+      static_assert(!is_void_v<variant_alternative_t<_Np, variant<_Types...>>>, "_Tp should not be void");
       if (__ptr && __ptr->index() == _Np)
 	return &__detail::__variant::__access(*__ptr);
       return nullptr;
     }
 
   template<size_t _Np, typename... _Types>
-    add_pointer_t<const tuple_element_t<_Np, variant<_Types...>>>
+    add_pointer_t<const variant_alternative_t<_Np, variant<_Types...>>>
     get_if(const variant<_Types...>* __ptr) noexcept
     {
       static_assert(_Np < sizeof...(_Types), "_Np should be in [0, number of alternatives)");
-      static_assert(!is_void_v<tuple_element_t<_Np, variant<_Types...>>>, "_Tp should not be void");
+      static_assert(!is_void_v<variant_alternative_t<_Np, variant<_Types...>>>, "_Tp should not be void");
       if (__ptr && __ptr->index() == _Np)
 	return &__detail::__variant::__access(*__ptr);
       return nullptr;
@@ -555,7 +589,7 @@ namespace __variant
       static_assert(__detail::__variant::__exactly_once<_Tp, _Types...>,
 		    "T should occur for exactly once in alternatives");
       static_assert(!is_void_v<_Tp>, "_Tp should not be void");
-      return get_if<tuple_find_v<_Tp, variant<_Types...>>>(__ptr);
+      return get_if<__detail::__variant::__index_of_v<_Tp, _Types...>>(__ptr);
     }
 
   template<typename _Tp, typename... _Types>
@@ -564,7 +598,7 @@ namespace __variant
       static_assert(__detail::__variant::__exactly_once<_Tp, _Types...>,
 		    "T should occur for exactly once in alternatives");
       static_assert(!is_void_v<_Tp>, "_Tp should not be void");
-      return get_if<tuple_find_v<_Tp, variant<_Types...>>>(__ptr);
+      return get_if<__detail::__variant::__index_of_v<_Tp, _Types...>>(__ptr);
     }
 
   template<typename... _Types>
@@ -675,7 +709,7 @@ namespace __variant
   template<typename... _Types>
     class variant
     : private __detail::__variant::_Variant_base<_Types...>,
-      private _Enable_default_constructor<is_default_constructible_v<tuple_element_t<0, variant<_Types...>>>, variant<_Types...>>,
+      private _Enable_default_constructor<is_default_constructible_v<variant_alternative_t<0, variant<_Types...>>>, variant<_Types...>>,
       private _Enable_copy_move<
 	  __and_<is_copy_constructible<_Types>...>::value,
 	  __and_<is_copy_constructible<_Types>..., is_move_constructible<_Types>..., is_copy_assignable<_Types>...>::value,
@@ -686,7 +720,7 @@ namespace __variant
     private:
       using _Base = __detail::__variant::_Variant_base<_Types...>;
 
-      using _Default_ctor_enabler = _Enable_default_constructor<is_default_constructible_v<tuple_element_t<0, variant<_Types...>>>, variant<_Types...>>;
+      using _Default_ctor_enabler = _Enable_default_constructor<is_default_constructible_v<variant_alternative_t<0, variant<_Types...>>>, variant<_Types...>>;
 
       template<typename _Tp>
 	static constexpr bool
@@ -695,11 +729,15 @@ namespace __variant
       template<typename _Tp>
 	static constexpr size_t __accepted_index = __detail::__variant::__accepted_index<_Tp&&, variant>::value;
 
-      template<typename _Tp>
-	static constexpr bool __acceptable = __accepted_index<_Tp> != tuple_not_found;
+      template<size_t _Np, bool = _Np < sizeof...(_Types)>
+	struct __to_type_impl;
 
       template<size_t _Np>
-	using __to_type = tuple_element_t<_Np, variant>;
+	struct __to_type_impl<_Np, true>
+	{ using type = variant_alternative_t<_Np, variant>; };
+
+      template<size_t _Np>
+	using __to_type = typename __to_type_impl<_Np>::type;
 
       template<typename _Tp>
 	using __accepted_type = __to_type<__accepted_index<_Tp>>;
@@ -707,47 +745,49 @@ namespace __variant
       template<typename _Tp>
 	using __storage = __detail::__variant::__storage<_Tp>;
 
+      template<typename _Tp>
+	static constexpr size_t __index_of = __detail::__variant::__index_of_v<_Tp, _Types...>;
+
     public:
       constexpr variant() noexcept(is_nothrow_default_constructible_v<__to_type<0>>) = default;
-      variant(const variant&) noexcept(__and_<is_nothrow_copy_constructible<_Types>...>::value) = default;
+      variant(const variant&) = default;
       variant(variant&&) noexcept(__and_<is_nothrow_move_constructible<_Types>...>::value) = default;
 
-      // TODO: Should be simiar to operator=(T&&)?
-      template<typename _Tp, typename = enable_if_t<__acceptable<_Tp&&> && !is_same_v<decay_t<_Tp>, variant>>>
+      template<typename _Tp, typename = enable_if_t<__exactly_once<__accepted_type<_Tp&&>> && is_constructible_v<__accepted_type<_Tp&&>, _Tp&&> && !is_same_v<decay_t<_Tp>, variant>>>
 	constexpr
 	variant(_Tp&& __t) noexcept(is_nothrow_constructible_v<__accepted_type<_Tp&&>, _Tp&&>)
-	: variant(emplaced_index<__accepted_index<_Tp&&>>, forward<_Tp>(__t))
+	: variant(in_place_index<__accepted_index<_Tp&&>>, forward<_Tp>(__t))
 	{ __glibcxx_assert(holds_alternative<__accepted_type<_Tp&&>>(*this)); }
 
       template<typename _Tp, typename... _Args, typename = enable_if_t<__exactly_once<_Tp> && is_constructible_v<_Tp, _Args&&...>>>
 	constexpr explicit
-	variant(emplaced_type_t<_Tp>, _Args&&... __args)
-	: variant(emplaced_index<tuple_find_v<_Tp, variant>>, forward<_Args>(__args)...)
+	variant(in_place_type_t<_Tp>, _Args&&... __args)
+	: variant(in_place_index<__index_of<_Tp>>, forward<_Args>(__args)...)
 	{ __glibcxx_assert(holds_alternative<_Tp>(*this)); }
 
       template<typename _Tp, typename _Up, typename... _Args,
 	       typename = enable_if_t<__exactly_once<_Tp> && is_constructible_v<_Tp, initializer_list<_Up>&, _Args&&...>>>
 	constexpr explicit
-	variant(emplaced_type_t<_Tp>, initializer_list<_Up> __il, _Args&&... __args)
-	: variant(emplaced_index<tuple_find_v<_Tp, variant>>, __il, forward<_Args>(__args)...)
+	variant(in_place_type_t<_Tp>, initializer_list<_Up> __il, _Args&&... __args)
+	: variant(in_place_index<__index_of<_Tp>>, __il, forward<_Args>(__args)...)
 	{ __glibcxx_assert(holds_alternative<_Tp>(*this)); }
 
       template<size_t _Np, typename... _Args, typename = enable_if_t<_Np < sizeof...(_Types) && is_constructible_v<__to_type<_Np>, _Args&&...>>>
 	constexpr explicit
-	variant(emplaced_index_t<_Np>, _Args&&... __args)
-	: _Base(emplaced_index<_Np>, forward<_Args>(__args)...), _Default_ctor_enabler(_Enable_default_constructor_tag{})
+	variant(in_place_index_t<_Np>, _Args&&... __args)
+	: _Base(in_place_index<_Np>, forward<_Args>(__args)...), _Default_ctor_enabler(_Enable_default_constructor_tag{})
 	{ __glibcxx_assert(index() == _Np); }
 
       template<size_t _Np, typename _Up, typename... _Args, typename = enable_if_t<_Np < sizeof...(_Types) && is_constructible_v<__to_type<_Np>, initializer_list<_Up>&, _Args&&...>>>
 	constexpr explicit
-	variant(emplaced_index_t<_Np>, initializer_list<_Up> __il, _Args&&... __args)
-	: variant(emplaced_index<_Np>, __il, forward<_Args>(__args)...)
+	variant(in_place_index_t<_Np>, initializer_list<_Up> __il, _Args&&... __args)
+	: variant(in_place_index<_Np>, __il, forward<_Args>(__args)...)
 	{ __glibcxx_assert(index() == _Np); }
 
       // Alloc versions.
       template<typename _Alloc, typename = enable_if_t<__is_uses_allocator_constructible_v<__to_type<0>, _Alloc>>>
 	constexpr variant(allocator_arg_t, const _Alloc& __a) noexcept(__is_nothrow_uses_allocator_constructible_v<__to_type<0>, _Alloc>)
-	: variant(allocator_arg, __a, emplaced_index<0>)
+	: variant(allocator_arg, __a, in_place_index<0>)
 	{ }
 
       template<typename _Alloc, typename = enable_if_t<__and_<__is_uses_allocator_constructible<_Types, _Alloc, const _Types&>...>::value>>
@@ -760,35 +800,35 @@ namespace __variant
 	: _Base(__a, std::move(__rhs)), _Default_ctor_enabler(_Enable_default_constructor_tag{})
 	{ }
 
-      template<typename _Alloc, typename _Tp, typename = enable_if_t<__acceptable<_Tp&&> && !is_same_v<decay_t<_Tp>, variant>, variant&>>
+      template<typename _Alloc, typename _Tp, typename = enable_if_t<__exactly_once<__accepted_type<_Tp&&>> && __is_uses_allocator_constructible_v<__accepted_type<_Tp&&>, _Tp&&> && !is_same_v<decay_t<_Tp>, variant>, variant&>>
 	constexpr
 	variant(allocator_arg_t, const _Alloc& __a, _Tp&& __t) noexcept(__is_nothrow_uses_allocator_constructible_v<__accepted_type<_Tp&&>, _Tp&&>)
-	: variant(allocator_arg, __a, emplaced_index<__accepted_index<_Tp&&>>, forward<_Tp>(__t))
+	: variant(allocator_arg, __a, in_place_index<__accepted_index<_Tp&&>>, forward<_Tp>(__t))
 	{ __glibcxx_assert(holds_alternative<__accepted_type<_Tp&&>>(*this)); }
 
       template<typename _Alloc, typename _Tp, typename... _Args, typename = enable_if_t<__exactly_once<_Tp> && __is_uses_allocator_constructible_v<_Tp, _Args&&...>>>
 	constexpr explicit
-	variant(allocator_arg_t, const _Alloc& __a, emplaced_type_t<_Tp>, _Args&&... __args)
-	: variant(allocator_arg, __a, emplaced_index<tuple_find_v<_Tp, variant>>, forward<_Args>(__args)...)
+	variant(allocator_arg_t, const _Alloc& __a, in_place_type_t<_Tp>, _Args&&... __args)
+	: variant(allocator_arg, __a, in_place_index<__index_of<_Tp>>, forward<_Args>(__args)...)
 	{ __glibcxx_assert(holds_alternative<_Tp>(*this)); }
 
       template<typename _Alloc, typename _Tp, typename _Up, typename... _Args,
 	       typename = enable_if_t<__exactly_once<_Tp> && __is_uses_allocator_constructible_v<_Tp, initializer_list<_Up>&, _Args&&...>>>
 	constexpr explicit
-	variant(allocator_arg_t, const _Alloc& __a, emplaced_type_t<_Tp>, initializer_list<_Up> __il, _Args&&... __args)
-	: variant(allocator_arg, __a, emplaced_index<tuple_find_v<_Tp, variant>>, __il, forward<_Args>(__args)...)
+	variant(allocator_arg_t, const _Alloc& __a, in_place_type_t<_Tp>, initializer_list<_Up> __il, _Args&&... __args)
+	: variant(allocator_arg, __a, in_place_index<__index_of<_Tp>>, __il, forward<_Args>(__args)...)
 	{ __glibcxx_assert(holds_alternative<_Tp>(*this)); }
 
       template<typename _Alloc, size_t _Np, typename... _Args, typename = enable_if_t<_Np < sizeof...(_Types) && __is_uses_allocator_constructible_v<__to_type<_Np>, _Args&&...>>>
 	constexpr explicit
-	variant(allocator_arg_t, const _Alloc& __a, emplaced_index_t<_Np>, _Args&&... __args)
-	: _Base(__a, emplaced_index<_Np>, forward<_Args>(__args)...), _Default_ctor_enabler(_Enable_default_constructor_tag{})
+	variant(allocator_arg_t, const _Alloc& __a, in_place_index_t<_Np>, _Args&&... __args)
+	: _Base(__a, in_place_index<_Np>, forward<_Args>(__args)...), _Default_ctor_enabler(_Enable_default_constructor_tag{})
 	{ __glibcxx_assert(index() == _Np); }
 
       template<typename _Alloc, size_t _Np, typename _Up, typename... _Args, typename = enable_if_t<_Np < sizeof...(_Types) && __is_uses_allocator_constructible_v<__to_type<_Np>, initializer_list<_Up>&, _Args&&...>>>
 	constexpr explicit
-	variant(allocator_arg_t, const _Alloc& __a, emplaced_index_t<_Np>, initializer_list<_Up> __il, _Args&&... __args)
-	: variant(allocator_arg, __a, emplaced_index<_Np>, __il, forward<_Args>(__args)...)
+	variant(allocator_arg_t, const _Alloc& __a, in_place_index_t<_Np>, initializer_list<_Up> __il, _Args&&... __args)
+	: variant(allocator_arg, __a, in_place_index<_Np>, __il, forward<_Args>(__args)...)
 	{ __glibcxx_assert(index() == _Np); }
       // End Alloc
 
@@ -798,7 +838,10 @@ namespace __variant
       variant& operator=(variant&&) noexcept(__and_<is_nothrow_move_constructible<_Types>..., is_nothrow_move_assignable<_Types>...>::value) = default;
 
       template<typename _Tp>
-	enable_if_t<__acceptable<_Tp&&> && !is_same_v<decay_t<_Tp>, variant>, variant&>
+	enable_if_t<__exactly_once<__accepted_type<_Tp&&>>
+		    && is_constructible_v<__accepted_type<_Tp&&>, _Tp&&>
+		    && is_assignable_v<__accepted_type<_Tp&&>, _Tp&&>
+		    && !is_same_v<decay_t<_Tp>, variant>, variant&>
 	operator=(_Tp&& __rhs) noexcept(is_nothrow_assignable_v<__accepted_type<_Tp&&>, _Tp&&>
 					&& is_nothrow_constructible_v<__accepted_type<_Tp&&>, _Tp&&>)
 	{
@@ -815,7 +858,7 @@ namespace __variant
 	void emplace(_Args&&... __args)
 	{
 	  static_assert(__exactly_once<_Tp>, "T should occur for exactly once in alternatives");
-	  this->emplace<tuple_find_v<_Tp, variant>>(forward<_Args>(__args)...);
+	  this->emplace<__index_of<_Tp>>(forward<_Args>(__args)...);
 	  __glibcxx_assert(holds_alternative<_Tp>(*this));
 	}
 
@@ -823,7 +866,7 @@ namespace __variant
 	void emplace(initializer_list<_Up> __il, _Args&&... __args)
 	{
 	  static_assert(__exactly_once<_Tp>, "T should occur for exactly once in alternatives");
-	  this->emplace<tuple_find_v<_Tp, variant>>(__il, forward<_Args>(__args)...);
+	  this->emplace<__index_of<_Tp>>(__il, forward<_Args>(__args)...);
 	  __glibcxx_assert(holds_alternative<_Tp>(*this));
 	}
 
@@ -832,7 +875,7 @@ namespace __variant
 	{
 	  static_assert(_Np < sizeof...(_Types), "_Np should be in [0, number of alternatives)");
 	  this->~variant();
-	  new (this) variant(emplaced_index<_Np>, forward<_Args>(__args)...);
+	  new (this) variant(in_place_index<_Np>, forward<_Args>(__args)...);
 	  __glibcxx_assert(index() == _Np);
 	}
 
@@ -841,7 +884,7 @@ namespace __variant
 	{
 	  static_assert(_Np < sizeof...(_Types), "_Np should be in [0, number of alternatives)");
 	  this->~variant();
-	  new (this) variant(emplaced_index<_Np>, __il, forward<_Args>(__args)...);
+	  new (this) variant(in_place_index<_Np>, __il, forward<_Args>(__args)...);
 	  __glibcxx_assert(index() == _Np);
 	}
 
@@ -885,7 +928,7 @@ namespace __variant
     };
 
   template<size_t _Np, typename... _Types>
-    tuple_element_t<_Np, variant<_Types...>>&
+    variant_alternative_t<_Np, variant<_Types...>>&
     get(variant<_Types...>& __v)
     {
       static_assert(_Np < sizeof...(_Types), "_Np should be in [0, number of alternatives)");
@@ -895,7 +938,7 @@ namespace __variant
     }
 
   template<size_t _Np, typename... _Types>
-    tuple_element_t<_Np, variant<_Types...>>&&
+    variant_alternative_t<_Np, variant<_Types...>>&&
     get(variant<_Types...>&& __v)
     {
       static_assert(_Np < sizeof...(_Types), "_Np should be in [0, number of alternatives)");
@@ -905,7 +948,7 @@ namespace __variant
     }
 
   template<size_t _Np, typename... _Types>
-    const tuple_element_t<_Np, variant<_Types...>>&
+    const variant_alternative_t<_Np, variant<_Types...>>&
     get(const variant<_Types...>& __v)
     {
       static_assert(_Np < sizeof...(_Types), "_Np should be in [0, number of alternatives)");
@@ -915,7 +958,7 @@ namespace __variant
     }
 
   template<size_t _Np, typename... _Types>
-    const tuple_element_t<_Np, variant<_Types...>>&&
+    const variant_alternative_t<_Np, variant<_Types...>>&&
     get(const variant<_Types...>&& __v)
     {
       static_assert(_Np < sizeof...(_Types), "_Np should be in [0, number of alternatives)");

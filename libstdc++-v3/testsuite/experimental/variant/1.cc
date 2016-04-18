@@ -72,7 +72,7 @@ void copy_ctor()
 
   {
     variant<int> a;
-    static_assert(noexcept(variant<int>(a)), "");
+    static_assert(!noexcept(variant<int>(a)), "");
   }
   {
     variant<string> a;
@@ -84,7 +84,7 @@ void copy_ctor()
   }
   {
     variant<int, char> a;
-    static_assert(noexcept(variant<int, char>(a)), "");
+    static_assert(!noexcept(variant<int, char>(a)), "");
   }
 }
 
@@ -92,6 +92,12 @@ void move_ctor()
 {
   static_assert(is_move_constructible_v<variant<int, string>>, "");
   static_assert(!is_move_constructible_v<variant<AllDeleted, string>>, "");
+}
+
+void arbitrary_ctor()
+{
+  static_assert(!is_constructible_v<variant<string, string>, const char*>, "");
+  static_assert(is_constructible_v<variant<int, string>, const char*>, "");
 }
 
 void copy_assign()
@@ -110,4 +116,10 @@ void dtor()
 {
   static_assert(is_destructible_v<variant<int, string>>, "");
   static_assert(is_destructible_v<variant<AllDeleted, string>>, "");
+}
+
+void arbitrary_assign()
+{
+  static_assert(!is_assignable_v<variant<string, string>, const char*>, "");
+  static_assert(is_assignable_v<variant<int, string>, const char*>, "");
 }

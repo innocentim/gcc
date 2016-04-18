@@ -47,19 +47,6 @@ inline namespace fundamentals_v1
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
-  // See C++14 §20.4.2.5, tuple helper classes
-  template <typename _Tp>
-    struct tuple_size : std::tuple_size<_Tp> { };
-
-  template <typename _Tp>
-    constexpr size_t tuple_size_v = tuple_size<_Tp>::value;
-
-  template <size_t _Np, typename _Tp>
-    struct tuple_element : std::tuple_element<_Np, _Tp> { };
-
-  template <size_t _Np, typename _Tp>
-    using tuple_element_t = typename tuple_element<_Np, _Tp>::type;
-
 #define __cpp_lib_experimental_tuple 201402
 
   template <typename _Fn, typename _Tuple, std::size_t... _Idx>
@@ -80,36 +67,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __apply_impl(std::forward<_Fn>(f), std::forward<_Tuple>(t),
 			  _Indices{});
     }
-
-  static constexpr size_t tuple_not_found = -1;
-
-  template <typename _Tp, typename _Up>
-    struct tuple_find;
-
-  template <typename _Tp, typename _Up>
-    constexpr size_t tuple_find_v = tuple_find<_Tp, _Up>::value;
-
-  template <typename _Tp, typename _Up>
-    struct tuple_find<_Tp, const _Up> : tuple_find<_Tp, _Up> { };
-
-  template <typename _Tp, typename _Up>
-    struct tuple_find<_Tp, volatile _Up> : tuple_find<_Tp, _Up> { };
-
-  template <typename _Tp, typename _Up>
-    struct tuple_find<_Tp, const volatile _Up> : tuple_find<_Tp, _Up> { };
-
-  template <typename _Tp, typename... _Types>
-    struct tuple_find<_Tp, tuple<_Types...>> : integral_constant<size_t, tuple_not_found> { };
-
-  template <typename _Tp, typename _First, typename... _Rest>
-    struct tuple_find<_Tp, tuple<_First, _Rest...>> :
-      integral_constant<size_t,
-        is_same_v<_Tp, _First> ? 0 :
-	  tuple_find_v<_Tp, tuple<_Rest...>> == tuple_not_found ? tuple_not_found :
-	    tuple_find_v<_Tp, tuple<_Rest...>> + 1> { };
-
-  // TODO: tuple_find for pair and array.
-  // TODO: In addition to being available via inclusion of the <experimental/tuple> header, the three templates are available when either of the headers <experimental/array>, <experimental/utility> or <experimental/variant> are included.
 
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace fundamentals_v1
