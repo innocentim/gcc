@@ -20,6 +20,7 @@
 
 #include <experimental/variant>
 #include <string>
+#include <vector>
 #include <testsuite_hooks.h>
 
 using namespace std;
@@ -56,7 +57,7 @@ void default_ctor()
 {
   static_assert(is_default_constructible_v<variant<int, string>>, "");
   static_assert(is_default_constructible_v<variant<string, string>>, "");
-  //static_assert(!is_default_constructible_v<variant<>>, "");
+  static_assert(!is_default_constructible_v<variant<>>, "");
   static_assert(!is_default_constructible_v<variant<AllDeleted, string>>, "");
   static_assert(is_default_constructible_v<variant<string, AllDeleted>>, "");
 
@@ -122,4 +123,160 @@ void arbitrary_assign()
 {
   static_assert(!is_assignable_v<variant<string, string>, const char*>, "");
   static_assert(is_assignable_v<variant<int, string>, const char*>, "");
+}
+
+void test_get()
+{
+  {
+    static_assert(is_same<decltype(get<0>(variant<int, string>())), int&&>::value, "");
+    static_assert(is_same<decltype(get<1>(variant<int, string>())), string&&>::value, "");
+    static_assert(is_same<decltype(get<1>(variant<int, string&>())), string&>::value, "");
+    static_assert(is_same<decltype(get<1>(variant<int, string&&>())), string&&>::value, "");
+    static_assert(is_same<decltype(get<1>(variant<int, const string>())), const string&&>::value, "");
+    static_assert(is_same<decltype(get<1>(variant<int, const string&>())), const string&>::value, "");
+    static_assert(is_same<decltype(get<1>(variant<int, const string&&>())), const string&&>::value, "");
+
+    static_assert(is_same<decltype(get<int>(variant<int, string>())), int&&>::value, "");
+    static_assert(is_same<decltype(get<string>(variant<int, string>())), string&&>::value, "");
+    static_assert(is_same<decltype(get<string&>(variant<int, string&>())), string&>::value, "");
+    static_assert(is_same<decltype(get<string&&>(variant<int, string&&>())), string&&>::value, "");
+    static_assert(is_same<decltype(get<const string>(variant<int, const string>())), const string&&>::value, "");
+    static_assert(is_same<decltype(get<const string&>(variant<int, const string&>())), const string&>::value, "");
+    static_assert(is_same<decltype(get<const string&&>(variant<int, const string&&>())), const string&&>::value, "");
+  }
+  {
+    variant<int, string> a;
+    variant<int, string&> b;
+    variant<int, string&&> c;
+    variant<int, const string> d;
+    variant<int, const string&> e;
+    variant<int, const string&&> f;
+
+    static_assert(is_same<decltype(get<0>(a)), int&>::value, "");
+    static_assert(is_same<decltype(get<1>(a)), string&>::value, "");
+    static_assert(is_same<decltype(get<1>(b)), string&>::value, "");
+    static_assert(is_same<decltype(get<1>(c)), string&>::value, "");
+    static_assert(is_same<decltype(get<1>(e)), const string&>::value, "");
+    static_assert(is_same<decltype(get<1>(e)), const string&>::value, "");
+    static_assert(is_same<decltype(get<1>(f)), const string&>::value, "");
+
+    static_assert(is_same<decltype(get<int>(a)), int&>::value, "");
+    static_assert(is_same<decltype(get<string>(a)), string&>::value, "");
+    static_assert(is_same<decltype(get<string&>(b)), string&>::value, "");
+    static_assert(is_same<decltype(get<string&&>(c)), string&>::value, "");
+    static_assert(is_same<decltype(get<const string>(e)), const string&>::value, "");
+    static_assert(is_same<decltype(get<const string&>(e)), const string&>::value, "");
+    static_assert(is_same<decltype(get<const string&&>(f)), const string&>::value, "");
+
+    static_assert(is_same<decltype(get_if<0>(&a)), int*>::value, "");
+    static_assert(is_same<decltype(get_if<1>(&a)), string*>::value, "");
+    static_assert(is_same<decltype(get_if<1>(&b)), string*>::value, "");
+    static_assert(is_same<decltype(get_if<1>(&c)), string*>::value, "");
+    static_assert(is_same<decltype(get_if<1>(&e)), const string*>::value, "");
+    static_assert(is_same<decltype(get_if<1>(&e)), const string*>::value, "");
+    static_assert(is_same<decltype(get_if<1>(&f)), const string*>::value, "");
+
+    static_assert(is_same<decltype(get_if<int>(&a)), int*>::value, "");
+    static_assert(is_same<decltype(get_if<string>(&a)), string*>::value, "");
+    static_assert(is_same<decltype(get_if<string&>(&b)), string*>::value, "");
+    static_assert(is_same<decltype(get_if<string&&>(&c)), string*>::value, "");
+    static_assert(is_same<decltype(get_if<const string>(&e)), const string*>::value, "");
+    static_assert(is_same<decltype(get_if<const string&>(&e)), const string*>::value, "");
+    static_assert(is_same<decltype(get_if<const string&&>(&f)), const string*>::value, "");
+  }
+  {
+    const variant<int, string> a;
+    const variant<int, string&> b;
+    const variant<int, string&&> c;
+    const variant<int, const string> d;
+    const variant<int, const string&> e;
+    const variant<int, const string&&> f;
+
+    static_assert(is_same<decltype(get<0>(a)), const int&>::value, "");
+    static_assert(is_same<decltype(get<1>(a)), const string&>::value, "");
+    static_assert(is_same<decltype(get<1>(b)), string&>::value, "");
+    static_assert(is_same<decltype(get<1>(c)), string&>::value, "");
+    static_assert(is_same<decltype(get<1>(d)), const string&>::value, "");
+    static_assert(is_same<decltype(get<1>(e)), const string&>::value, "");
+    static_assert(is_same<decltype(get<1>(f)), const string&>::value, "");
+
+    static_assert(is_same<decltype(get<int>(a)), const int&>::value, "");
+    static_assert(is_same<decltype(get<string>(a)), const string&>::value, "");
+    static_assert(is_same<decltype(get<string&>(b)), string&>::value, "");
+    static_assert(is_same<decltype(get<string&&>(c)), string&>::value, "");
+    static_assert(is_same<decltype(get<const string>(d)), const string&>::value, "");
+    static_assert(is_same<decltype(get<const string&>(e)), const string&>::value, "");
+    static_assert(is_same<decltype(get<const string&&>(f)), const string&>::value, "");
+
+    static_assert(is_same<decltype(get_if<0>(&a)), const int*>::value, "");
+    static_assert(is_same<decltype(get_if<1>(&a)), const string*>::value, "");
+    static_assert(is_same<decltype(get_if<1>(&b)), string*>::value, "");
+    static_assert(is_same<decltype(get_if<1>(&c)), string*>::value, "");
+    static_assert(is_same<decltype(get_if<1>(&d)), const string*>::value, "");
+    static_assert(is_same<decltype(get_if<1>(&e)), const string*>::value, "");
+    static_assert(is_same<decltype(get_if<1>(&f)), const string*>::value, "");
+
+    static_assert(is_same<decltype(get_if<int>(&a)), const int*>::value, "");
+    static_assert(is_same<decltype(get_if<string>(&a)), const string*>::value, "");
+    static_assert(is_same<decltype(get_if<string&>(&b)), string*>::value, "");
+    static_assert(is_same<decltype(get_if<string&&>(&c)), string*>::value, "");
+    static_assert(is_same<decltype(get_if<const string>(&d)), const string*>::value, "");
+    static_assert(is_same<decltype(get_if<const string&>(&e)), const string*>::value, "");
+    static_assert(is_same<decltype(get_if<const string&&>(&f)), const string*>::value, "");
+  }
+}
+
+void test_relational()
+{
+  {
+    const variant<int, string> a, b;
+    (void)(a < b);
+    (void)(a > b);
+    (void)(a <= b);
+    (void)(a == b);
+    (void)(a != b);
+    (void)(a >= b);
+  }
+  {
+    const monostate a, b;
+    (void)(a < b);
+    (void)(a > b);
+    (void)(a <= b);
+    (void)(a == b);
+    (void)(a != b);
+    (void)(a >= b);
+  }
+}
+
+void test_swap()
+{
+  variant<int, string> a, b;
+  a.swap(b);
+  swap(a, b);
+}
+
+void test_visit()
+{
+  {
+    struct Visitor
+    {
+      void operator()(monostate) {}
+      void operator()(const int&) {}
+    };
+    struct CVisitor
+    {
+      void operator()(monostate) const {}
+      void operator()(const int&) const {}
+    };
+    variant<monostate, int&, const int&, int&&, const int&&> a;
+    const variant<monostate, int&, const int&, int&&, const int&&> b;
+    Visitor v;
+    const CVisitor u;
+    static_assert(is_same<void, decltype(visit(Visitor(), a))>::value, "");
+    static_assert(is_same<void, decltype(visit(Visitor(), b))>::value, "");
+    static_assert(is_same<void, decltype(visit(v, a))>::value, "");
+    static_assert(is_same<void, decltype(visit(v, b))>::value, "");
+    static_assert(is_same<void, decltype(visit(u, a))>::value, "");
+    static_assert(is_same<void, decltype(visit(u, b))>::value, "");
+  }
 }

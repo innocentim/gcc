@@ -138,7 +138,7 @@ namespace __variant
       _Reference_storage(_Reference __ref) noexcept : _M_storage(__ref) { }
 
       operator _Reference() noexcept
-      { return _M_storage; }
+      { return static_cast<_Reference>(_M_storage); }
 
       _Reference _M_storage;
     };
@@ -180,7 +180,7 @@ namespace __variant
     decltype(auto)
     __get_alternative(void* __ptr)
     {
-      using _Storage = remove_reference_t<_Qualified_storage>;
+      using _Storage = decay_t<_Qualified_storage>;
       using _Alternative = typename __alternative_type<_Storage>::type;
       return __reserved_type_map<_Qualified_storage, _Alternative>(*static_cast<_Storage*>(__ptr));
     }
@@ -188,18 +188,18 @@ namespace __variant
   template<typename _Lhs, typename _Rhs>
     constexpr void
     __erased_ctor(void* __lhs, void* __rhs)
-    { new (__lhs) remove_reference_t<_Lhs>(__get_alternative<_Rhs>(__rhs)); }
+    { new (__lhs) decay_t<_Lhs>(__get_alternative<_Rhs>(__rhs)); }
 
   template<typename _Alloc, typename _Lhs, typename _Rhs>
     constexpr void
     __erased_use_alloc_ctor(const _Alloc& __a, void* __lhs, void* __rhs)
-    { __uses_allocator_construct(__a, static_cast<remove_reference_t<_Lhs>*>(__lhs), __get_alternative<_Rhs>(__rhs)); }
+    { __uses_allocator_construct(__a, static_cast<decay_t<_Lhs>*>(__lhs), __get_alternative<_Rhs>(__rhs)); }
 
   template<typename _Tp>
     constexpr void
     __erased_dtor(void* __ptr)
     {
-      using _Storage = remove_reference_t<_Tp>;
+      using _Storage = decay_t<_Tp>;
       static_cast<_Storage*>(__ptr)->~_Storage();
     }
 
@@ -405,8 +405,8 @@ namespace __variant
     { static constexpr size_t value = variant_npos; };
 
   template<typename _Tp, typename... _Types>
-    struct __accepted_index<_Tp, variant<_Types...>, decltype(__overload_set<_Types...>::_S_fun(declval<decay_t<_Tp>>()), declval<void>())>
-    { static constexpr size_t value = sizeof...(_Types) - 1 - decltype(__overload_set<_Types...>::_S_fun(declval<decay_t<_Tp>>()))::value; };
+    struct __accepted_index<_Tp, variant<_Types...>, decltype(__overload_set<_Types...>::_S_fun(declval<_Tp>()), declval<void>())>
+    { static constexpr size_t value = sizeof...(_Types) - 1 - decltype(__overload_set<_Types...>::_S_fun(declval<_Tp>()))::value; };
 
   template<typename _Variant>
     void* __get_storage(_Variant&& __v)
@@ -421,7 +421,9 @@ namespace __variant
 
   template<typename _Visitor, typename... _Args>
     decltype(auto) __visit_invoke(_Visitor&& __visitor, _To_type<_Args, void*>... __ptrs)
-    { return forward<_Visitor>(__visitor)(__get_alternative<_Args>(__ptrs)...); }
+    {
+      return forward<_Visitor>(__visitor)(__get_alternative<_Args>(__ptrs)...);
+    }
 
   template<typename _Tp, size_t... _Dimensions>
     struct _Multi_array
@@ -502,7 +504,7 @@ namespace __variant
     constexpr in_place_type_t<_Tp> in_place_type{};
 
   template<typename _Tp, typename... _Types>
-    bool holds_alternative(const variant<_Types...>& __v) noexcept
+    constexpr bool holds_alternative(const variant<_Types...>& __v) noexcept
     {
       static_assert(__detail::__variant::__exactly_once<_Tp, _Types...>,
 		    "T should occur for exactly once in alternatives");
@@ -518,11 +520,11 @@ namespace __variant
     get(variant<_Types...>&&);
 
   template<size_t _Np, typename... _Types>
-    const variant_alternative_t<_Np, variant<_Types...>>&
+    variant_alternative_t<_Np, variant<_Types...>> const&
     get(const variant<_Types...>&);
 
   template<size_t _Np, typename... _Types>
-    const variant_alternative_t<_Np, variant<_Types...>>&&
+    variant_alternative_t<_Np, variant<_Types...>> const&&
     get(const variant<_Types...>&&);
 
   template<typename _Tp, typename... _Types>
@@ -790,13 +792,13 @@ namespace __variant
 	: variant(allocator_arg, __a, in_place_index<0>)
 	{ }
 
-      template<typename _Alloc, typename = enable_if_t<__and_<__is_uses_allocator_constructible<_Types, _Alloc, const _Types&>...>::value>>
-	variant(allocator_arg_t, const _Alloc& __a, const variant& __rhs) noexcept(__and_<__is_uses_allocator_constructible<_Types, _Alloc, const _Types&>...>::value)
+      template<typename _Alloc, typename = enable_if_t<__and_<__is_uses_allocator_constructible<_Types, _Alloc, add_lvalue_reference_t<add_const_t<_Types>>>...>::value>>
+	variant(allocator_arg_t, const _Alloc& __a, const variant& __rhs) noexcept(__and_<__is_uses_allocator_constructible<_Types, _Alloc, add_lvalue_reference_t<add_const_t<_Types>>>...>::value)
 	: _Base(__a, __rhs), _Default_ctor_enabler(_Enable_default_constructor_tag{})
 	{ }
 
-      template<typename _Alloc, typename = enable_if_t<__and_<__is_uses_allocator_constructible<_Types, _Alloc, _Types&&>...>::value>>
-	variant(allocator_arg_t, const _Alloc& __a, variant&& __rhs) noexcept(__and_<__is_uses_allocator_constructible<_Types, _Alloc, _Types&&>...>::value)
+      template<typename _Alloc, typename = enable_if_t<__and_<__is_uses_allocator_constructible<_Types, _Alloc, add_rvalue_reference_t<_Types>>...>::value>>
+	variant(allocator_arg_t, const _Alloc& __a, variant&& __rhs) noexcept(__and_<__is_uses_allocator_constructible<_Types, _Alloc, add_rvalue_reference_t<_Types>>...>::value)
 	: _Base(__a, std::move(__rhs)), _Default_ctor_enabler(_Enable_default_constructor_tag{})
 	{ }
 
@@ -898,7 +900,7 @@ namespace __variant
       swap(variant& __rhs) noexcept(__and_<__is_nothrow_swappable<_Types>...>::value
 				    && is_nothrow_move_assignable_v<variant>)
       {
-	if (this->index() == __rhs._M_index())
+	if (this->index() == __rhs.index())
 	  {
 	    if (this->_M_valid())
 	      {
@@ -926,6 +928,9 @@ namespace __variant
 
       template<typename _Vp> friend void* __detail::__variant::__get_storage(_Vp&& __v);
     };
+
+  template<>
+    class variant<>;
 
   template<size_t _Np, typename... _Types>
     variant_alternative_t<_Np, variant<_Types...>>&
