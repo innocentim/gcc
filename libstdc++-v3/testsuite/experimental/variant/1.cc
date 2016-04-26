@@ -93,24 +93,46 @@ void move_ctor()
 {
   static_assert(is_move_constructible_v<variant<int, string>>, "");
   static_assert(!is_move_constructible_v<variant<AllDeleted, string>>, "");
+  static_assert(!noexcept(variant<int, Empty>(variant<int, Empty>())), "");
+  static_assert(noexcept(variant<int, DefaultNoexcept>(variant<int, DefaultNoexcept>())), "");
 }
 
 void arbitrary_ctor()
 {
   static_assert(!is_constructible_v<variant<string, string>, const char*>, "");
   static_assert(is_constructible_v<variant<int, string>, const char*>, "");
+  static_assert(noexcept(variant<int, Empty>(int{})), "");
+  static_assert(noexcept(variant<int, DefaultNoexcept>(int{})), "");
+  static_assert(!noexcept(variant<int, Empty>(Empty{})), "");
+  static_assert(noexcept(variant<int, DefaultNoexcept>(DefaultNoexcept{})), "");
 }
 
 void copy_assign()
 {
   static_assert(is_copy_assignable_v<variant<int, string>>, "");
   static_assert(!is_copy_assignable_v<variant<AllDeleted, string>>, "");
+  {
+    variant<Empty> a;
+    static_assert(!noexcept(a = a), "");
+  }
+  {
+    variant<DefaultNoexcept> a;
+    static_assert(!noexcept(a = a), "");
+  }
 }
 
 void move_assign()
 {
   static_assert(is_move_assignable_v<variant<int, string>>, "");
   static_assert(!is_move_assignable_v<variant<AllDeleted, string>>, "");
+  {
+    variant<Empty> a;
+    static_assert(!noexcept(a = std::move(a)), "");
+  }
+  {
+    variant<DefaultNoexcept> a;
+    static_assert(noexcept(a = std::move(a)), "");
+  }
 }
 
 void dtor()
@@ -123,6 +145,10 @@ void arbitrary_assign()
 {
   static_assert(!is_assignable_v<variant<string, string>, const char*>, "");
   static_assert(is_assignable_v<variant<int, string>, const char*>, "");
+  static_assert(noexcept(variant<int, Empty>() = int{}), "");
+  static_assert(noexcept(variant<int, DefaultNoexcept>() = int{}), "");
+  static_assert(!noexcept(variant<int, Empty>() = Empty{}), "");
+  static_assert(noexcept(variant<int, DefaultNoexcept>() = DefaultNoexcept{}), "");
 }
 
 void test_get()
@@ -279,4 +305,30 @@ void test_visit()
     static_assert(is_same<void, decltype(visit(u, a))>::value, "");
     static_assert(is_same<void, decltype(visit(u, b))>::value, "");
   }
+  {
+    struct Visitor
+    {
+      bool operator()(int, float) { return false; }
+      bool operator()(int, double) { return false; }
+      bool operator()(char, float) { return false; }
+      bool operator()(char, double) { return false; }
+    };
+    visit(Visitor(), variant<int, char>(), variant<float, double>());
+  }
+}
+
+void test_constexpr()
+{
+  constexpr variant<int> a;
+  static_assert(holds_alternative<int>(a), "");
+  constexpr variant<int, char> b(in_place_index<0>, int{});
+  static_assert(holds_alternative<int>(b), "");
+  constexpr variant<int, char> c(in_place_type<int>, int{});
+  static_assert(holds_alternative<int>(c), "");
+  constexpr variant<int, char> d(in_place_index<1>, char{});
+  static_assert(holds_alternative<char>(d), "");
+  constexpr variant<int, char> e(in_place_type<char>, char{});
+  static_assert(holds_alternative<char>(e), "");
+  constexpr variant<int, char> f(char{});
+  static_assert(holds_alternative<char>(f), "");
 }

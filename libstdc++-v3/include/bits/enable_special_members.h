@@ -57,7 +57,7 @@ template<bool _Switch, typename _Tag = void>
     operator=(_Enable_default_constructor&&) noexcept = default;
 
     // Can be used in other ctors.
-    explicit _Enable_default_constructor(_Enable_default_constructor_tag) { }
+    constexpr explicit _Enable_default_constructor(_Enable_default_constructor_tag) { }
   };
 
 
