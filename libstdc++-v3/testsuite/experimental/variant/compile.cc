@@ -107,6 +107,58 @@ void arbitrary_ctor()
   static_assert(noexcept(variant<int, DefaultNoexcept>(DefaultNoexcept{})), "");
 }
 
+void in_place_index_ctor()
+{
+  variant<string, string> a(in_place_index<0>, "a");
+  variant<string, string> b(in_place_index<1>, {'a'});
+}
+
+void in_place_type_ctor()
+{
+  variant<int, string, int> a(in_place_type<string>, "a");
+  variant<int, string, int> b(in_place_type<string>, {'a'});
+  static_assert(!is_constructible_v<variant<string, string>, in_place_type_t<string>, const char*>, "");
+}
+
+void uses_alloc_ctors()
+{
+  std::allocator<char> alloc;
+  variant<int> a(allocator_arg, alloc);
+  static_assert(!is_constructible_v<variant<AllDeleted>, allocator_arg_t, std::allocator<char>>, "");
+  {
+    variant<int> b(allocator_arg, alloc, a);
+    static_assert(!is_constructible_v<variant<void>, allocator_arg_t, std::allocator<char>, const variant<void>&>, "");
+  }
+  {
+    variant<int> b(allocator_arg, alloc, std::move(a));
+    static_assert(!is_constructible_v<variant<void>, allocator_arg_t, std::allocator<char>, variant<void>&&>, "");
+  }
+  {
+    variant<string, int> b(allocator_arg, alloc, "a");
+    static_assert(!is_constructible_v<variant<string, string>, allocator_arg_t, std::allocator<char>, const char*>, "");
+  }
+  {
+    variant<string, int> b(allocator_arg, alloc, in_place_index<0>, "a");
+    variant<string, string> c(allocator_arg, alloc, in_place_index<1>, "a");
+  }
+  {
+    variant<string, int> b(allocator_arg, alloc, in_place_index<0>, {'a'});
+    variant<string, string> c(allocator_arg, alloc, in_place_index<1>, {'a'});
+  }
+  {
+    variant<int, string, int> b(allocator_arg, alloc, in_place_type<string>, "a");
+  }
+  {
+    variant<int, string, int> b(allocator_arg, alloc, in_place_type<string>, {'a'});
+  }
+}
+
+void dtor()
+{
+  static_assert(is_destructible_v<variant<int, string>>, "");
+  static_assert(is_destructible_v<variant<AllDeleted, string>>, "");
+}
+
 void copy_assign()
 {
   static_assert(is_copy_assignable_v<variant<int, string>>, "");
@@ -133,12 +185,6 @@ void move_assign()
     variant<DefaultNoexcept> a;
     static_assert(noexcept(a = std::move(a)), "");
   }
-}
-
-void dtor()
-{
-  static_assert(is_destructible_v<variant<int, string>>, "");
-  static_assert(is_destructible_v<variant<AllDeleted, string>>, "");
 }
 
 void arbitrary_assign()
@@ -331,4 +377,17 @@ void test_constexpr()
   static_assert(holds_alternative<char>(e), "");
   constexpr variant<int, char> f(char{});
   static_assert(holds_alternative<char>(f), "");
+}
+
+void test_void()
+{
+  static_assert(is_same<int&&, decltype(get<int>(variant<int, void>()))>::value, "");
+  static_assert(!is_default_constructible_v<variant<void, int>>, "");
+  static_assert(!is_copy_constructible_v<variant<int, void>>, "");
+  static_assert(!is_move_constructible_v<variant<int, void>>, "");
+  static_assert(!is_copy_assignable_v<variant<int, void>>, "");
+  static_assert(!is_move_assignable_v<variant<int, void>>, "");
+  variant<int, void, string> v;
+  v = 3;
+  v = "asdf";
 }

@@ -340,26 +340,26 @@ namespace __variant
 	{ }
 
       template<typename _Alloc>
-	_Variant_base(const _Alloc __a, const _Variant_base& __rhs)
+	_Variant_base(const _Alloc& __a, const _Variant_base& __rhs)
 	: _Storage(), _M_index(__rhs._M_index)
 	{
 	  if (__rhs._M_valid())
 	    {
 	      static constexpr void (*_S_vtable[])(const _Alloc&, void*, void*) =
 		{ &__erased_use_alloc_ctor<_Alloc, __storage<_Types>&, const __storage<_Types>&>... };
-	      _S_vtable[__rhs._M_index](_M_storage(), __rhs._M_storage());
+	      _S_vtable[__rhs._M_index](__a, _M_storage(), __rhs._M_storage());
 	    }
 	}
 
       template<typename _Alloc>
-	_Variant_base(const _Alloc __a, _Variant_base&& __rhs)
+	_Variant_base(const _Alloc& __a, _Variant_base&& __rhs)
 	: _Storage(), _M_index(__rhs._M_index)
 	{
 	  if (__rhs._M_valid())
 	    {
 	      static constexpr void (*_S_vtable[])(const _Alloc&, void*, void*) =
 		{ &__erased_use_alloc_ctor<_Alloc, __storage<_Types>&, __storage<_Types>&&>... };
-	      _S_vtable[__rhs._M_index](_M_storage(), __rhs._M_storage());
+	      _S_vtable[__rhs._M_index](__a, _M_storage(), __rhs._M_storage());
 	    }
 	}
 
@@ -452,6 +452,12 @@ namespace __variant
     {
       using __overload_set<_Rest...>::_S_fun;
       static integral_constant<size_t, sizeof...(_Rest)> _S_fun(_First);
+    };
+
+  template<typename... _Rest>
+    struct __overload_set<void, _Rest...> : __overload_set<_Rest...>
+    {
+      using __overload_set<_Rest...>::_S_fun;
     };
 
   template<typename _Tp, typename _Variant, typename = void>
@@ -828,65 +834,58 @@ namespace __variant
 	: variant(in_place_index<__index_of<_Tp>>, __il, forward<_Args>(__args)...)
 	{ __glibcxx_assert(holds_alternative<_Tp>(*this)); }
 
-      template<size_t _Np, typename... _Args, typename = enable_if_t<_Np < sizeof...(_Types) && is_constructible_v<__to_type<_Np>, _Args&&...>>>
+      template<size_t _Np, typename... _Args, typename = enable_if_t<is_constructible_v<__to_type<_Np>, _Args&&...>>>
 	constexpr explicit
 	variant(in_place_index_t<_Np>, _Args&&... __args)
 	: _Base(in_place_index<_Np>, forward<_Args>(__args)...), _Default_ctor_enabler(_Enable_default_constructor_tag{})
 	{ __glibcxx_assert(index() == _Np); }
 
-      template<size_t _Np, typename _Up, typename... _Args, typename = enable_if_t<_Np < sizeof...(_Types) && is_constructible_v<__to_type<_Np>, initializer_list<_Up>&, _Args&&...>>>
+      template<size_t _Np, typename _Up, typename... _Args, typename = enable_if_t<is_constructible_v<__to_type<_Np>, initializer_list<_Up>&, _Args&&...>>>
 	constexpr explicit
 	variant(in_place_index_t<_Np>, initializer_list<_Up> __il, _Args&&... __args)
-	: variant(in_place_index<_Np>, __il, forward<_Args>(__args)...)
+	: _Base(in_place_index<_Np>, __il, forward<_Args>(__args)...), _Default_ctor_enabler(_Enable_default_constructor_tag{})
 	{ __glibcxx_assert(index() == _Np); }
 
-      // Alloc versions.
       template<typename _Alloc, typename = enable_if_t<__is_uses_allocator_constructible_v<__to_type<0>, _Alloc>>>
-	constexpr variant(allocator_arg_t, const _Alloc& __a) noexcept(__is_nothrow_uses_allocator_constructible_v<__to_type<0>, _Alloc>)
+	variant(allocator_arg_t, const _Alloc& __a)
 	: variant(allocator_arg, __a, in_place_index<0>)
 	{ }
 
       template<typename _Alloc, typename = enable_if_t<__and_<__is_uses_allocator_constructible<_Types, _Alloc, add_lvalue_reference_t<add_const_t<_Types>>>...>::value>>
-	variant(allocator_arg_t, const _Alloc& __a, const variant& __rhs) noexcept(__and_<__is_uses_allocator_constructible<_Types, _Alloc, add_lvalue_reference_t<add_const_t<_Types>>>...>::value)
+	variant(allocator_arg_t, const _Alloc& __a, const variant& __rhs)
 	: _Base(__a, __rhs), _Default_ctor_enabler(_Enable_default_constructor_tag{})
 	{ }
 
       template<typename _Alloc, typename = enable_if_t<__and_<__is_uses_allocator_constructible<_Types, _Alloc, add_rvalue_reference_t<_Types>>...>::value>>
-	variant(allocator_arg_t, const _Alloc& __a, variant&& __rhs) noexcept(__and_<__is_uses_allocator_constructible<_Types, _Alloc, add_rvalue_reference_t<_Types>>...>::value)
+	variant(allocator_arg_t, const _Alloc& __a, variant&& __rhs)
 	: _Base(__a, std::move(__rhs)), _Default_ctor_enabler(_Enable_default_constructor_tag{})
 	{ }
 
-      template<typename _Alloc, typename _Tp, typename = enable_if_t<__exactly_once<__accepted_type<_Tp&&>> && __is_uses_allocator_constructible_v<__accepted_type<_Tp&&>, _Tp&&> && !is_same_v<decay_t<_Tp>, variant>, variant&>>
-	constexpr
-	variant(allocator_arg_t, const _Alloc& __a, _Tp&& __t) noexcept(__is_nothrow_uses_allocator_constructible_v<__accepted_type<_Tp&&>, _Tp&&>)
+      template<typename _Alloc, typename _Tp, typename = enable_if_t<__exactly_once<__accepted_type<_Tp&&>> && __is_uses_allocator_constructible_v<__accepted_type<_Tp&&>, _Alloc, _Tp&&> && !is_same_v<decay_t<_Tp>, variant>, variant&>>
+	variant(allocator_arg_t, const _Alloc& __a, _Tp&& __t)
 	: variant(allocator_arg, __a, in_place_index<__accepted_index<_Tp&&>>, forward<_Tp>(__t))
 	{ __glibcxx_assert(holds_alternative<__accepted_type<_Tp&&>>(*this)); }
 
-      template<typename _Alloc, typename _Tp, typename... _Args, typename = enable_if_t<__exactly_once<_Tp> && __is_uses_allocator_constructible_v<_Tp, _Args&&...>>>
-	constexpr explicit
+      template<typename _Alloc, typename _Tp, typename... _Args, typename = enable_if_t<__exactly_once<_Tp> && __is_uses_allocator_constructible_v<_Tp, _Alloc, _Args&&...>>>
 	variant(allocator_arg_t, const _Alloc& __a, in_place_type_t<_Tp>, _Args&&... __args)
 	: variant(allocator_arg, __a, in_place_index<__index_of<_Tp>>, forward<_Args>(__args)...)
 	{ __glibcxx_assert(holds_alternative<_Tp>(*this)); }
 
       template<typename _Alloc, typename _Tp, typename _Up, typename... _Args,
-	       typename = enable_if_t<__exactly_once<_Tp> && __is_uses_allocator_constructible_v<_Tp, initializer_list<_Up>&, _Args&&...>>>
-	constexpr explicit
+	       typename = enable_if_t<__exactly_once<_Tp> && __is_uses_allocator_constructible_v<_Tp, _Alloc, initializer_list<_Up>&, _Args&&...>>>
 	variant(allocator_arg_t, const _Alloc& __a, in_place_type_t<_Tp>, initializer_list<_Up> __il, _Args&&... __args)
 	: variant(allocator_arg, __a, in_place_index<__index_of<_Tp>>, __il, forward<_Args>(__args)...)
 	{ __glibcxx_assert(holds_alternative<_Tp>(*this)); }
 
-      template<typename _Alloc, size_t _Np, typename... _Args, typename = enable_if_t<_Np < sizeof...(_Types) && __is_uses_allocator_constructible_v<__to_type<_Np>, _Args&&...>>>
-	constexpr explicit
+      template<typename _Alloc, size_t _Np, typename... _Args, typename = enable_if_t<__is_uses_allocator_constructible_v<__to_type<_Np>, _Alloc, _Args&&...>>>
 	variant(allocator_arg_t, const _Alloc& __a, in_place_index_t<_Np>, _Args&&... __args)
 	: _Base(__a, in_place_index<_Np>, forward<_Args>(__args)...), _Default_ctor_enabler(_Enable_default_constructor_tag{})
 	{ __glibcxx_assert(index() == _Np); }
 
-      template<typename _Alloc, size_t _Np, typename _Up, typename... _Args, typename = enable_if_t<_Np < sizeof...(_Types) && __is_uses_allocator_constructible_v<__to_type<_Np>, initializer_list<_Up>&, _Args&&...>>>
-	constexpr explicit
+      template<typename _Alloc, size_t _Np, typename _Up, typename... _Args, typename = enable_if_t<__is_uses_allocator_constructible_v<__to_type<_Np>, _Alloc, initializer_list<_Up>&, _Args&&...>>>
 	variant(allocator_arg_t, const _Alloc& __a, in_place_index_t<_Np>, initializer_list<_Up> __il, _Args&&... __args)
-	: variant(allocator_arg, __a, in_place_index<_Np>, __il, forward<_Args>(__args)...)
+	: _Base(__a, in_place_index<_Np>, __il, forward<_Args>(__args)...), _Default_ctor_enabler(_Enable_default_constructor_tag{})
 	{ __glibcxx_assert(index() == _Np); }
-      // End Alloc
 
       ~variant() = default;
 
