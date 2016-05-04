@@ -21,10 +21,35 @@
 #include <experimental/variant>
 #include <string>
 #include <vector>
+#include <unordered_set>
 #include <testsuite_hooks.h>
+#include <testsuite_allocator.h>
 
 using namespace std;
 using namespace experimental;
+
+struct AlwaysThrow
+{
+  AlwaysThrow() = default;
+
+  AlwaysThrow(const AlwaysThrow&)
+  { throw nullptr; }
+
+  AlwaysThrow(AlwaysThrow&&)
+  { throw nullptr; }
+
+  AlwaysThrow& operator=(const AlwaysThrow&)
+  {
+    throw nullptr;
+    return *this;
+  }
+
+  AlwaysThrow& operator=(AlwaysThrow&&)
+  {
+    throw nullptr;
+    return *this;
+  }
+};
 
 void default_ctor()
 {
@@ -152,6 +177,50 @@ void in_place_type_ctor()
   }
 }
 
+struct UsesAllocatable
+{
+  template<typename Alloc>
+    UsesAllocatable(std::allocator_arg_t, const Alloc& a)
+    : d(0), a(static_cast<const void*>(&a)) { }
+
+  template<typename Alloc>
+    UsesAllocatable(std::allocator_arg_t, const Alloc& a, const UsesAllocatable&)
+    : d(1), a(static_cast<const void*>(&a)) { }
+
+  template<typename Alloc>
+    UsesAllocatable(std::allocator_arg_t, const Alloc& a, UsesAllocatable&&)
+    : d(2), a(static_cast<const void*>(&a)) { }
+
+  int d;
+  const void* a;
+};
+
+namespace std
+{
+  template<>
+    struct uses_allocator<UsesAllocatable, std::allocator<char>> : true_type { };
+}
+
+void uses_allocator_ctor()
+{
+  bool test [[gnu::unused]] = true;
+
+  std::allocator<char> a;
+  variant<UsesAllocatable> v(std::allocator_arg, a);
+  VERIFY(get<0>(v).d == 0);
+  VERIFY(get<0>(v).a == &a);
+  {
+    variant<UsesAllocatable> u(std::allocator_arg, a, v);
+    VERIFY(get<0>(u).d == 1);
+    VERIFY(get<0>(u).a == &a);
+  }
+  {
+    variant<UsesAllocatable> u(std::allocator_arg, a, std::move(v));
+    VERIFY(get<0>(u).d == 2);
+    VERIFY(get<0>(u).a == &a);
+  }
+}
+
 void emplace()
 {
   bool test [[gnu::unused]] = true;
@@ -165,6 +234,17 @@ void emplace()
   VERIFY(get<1>(v) == "ab");
   v.emplace<string>({'a', 'c'});
   VERIFY(get<string>(v) == "ac");
+  {
+    variant<int, AlwaysThrow> v;
+    AlwaysThrow a;
+    try { v.emplace<1>(a); } catch (nullptr_t) { }
+    VERIFY(v.valueless_by_exception());
+  }
+  {
+    variant<int, AlwaysThrow> v;
+    try { v.emplace<1>(AlwaysThrow{}); } catch (nullptr_t) { }
+    VERIFY(v.valueless_by_exception());
+  }
 }
 
 void test_get()
@@ -298,6 +378,103 @@ void test_visit()
   }
 }
 
+void test_hash()
+{
+  bool test [[gnu::unused]] = true;
+
+  unordered_set<variant<int, string>> s;
+  VERIFY(s.emplace(3).second);
+  VERIFY(s.emplace("asdf").second);
+  VERIFY(s.emplace().second);
+  VERIFY(s.size() == 3);
+  VERIFY(!s.emplace(3).second);
+  VERIFY(!s.emplace("asdf").second);
+  VERIFY(!s.emplace().second);
+  VERIFY(s.size() == 3);
+  {
+    struct A
+    {
+      operator int()
+      {
+        throw nullptr;
+      }
+    };
+    variant<int, string> v;
+    try
+      {
+        v.emplace<0>(A{});
+      }
+    catch (nullptr_t)
+      {
+      }
+    VERIFY(v.valueless_by_exception());
+    VERIFY(s.insert(v).second);
+    VERIFY(s.size() == 4);
+    VERIFY(!s.insert(v).second);
+  }
+}
+
+void test_valueless_by_exception()
+{
+  bool test [[gnu::unused]] = true;
+
+  {
+    AlwaysThrow a;
+    bool caught = false;
+    try
+      {
+	variant<int, AlwaysThrow> v(a);
+      }
+    catch (nullptr_t)
+      {
+	caught = true;
+      }
+    VERIFY(caught);
+  }
+  {
+    AlwaysThrow a;
+    bool caught = false;
+    try
+      {
+	variant<int, AlwaysThrow> v(a);
+      }
+    catch (nullptr_t)
+      {
+	caught = true;
+      }
+    VERIFY(caught);
+  }
+  {
+    variant<int, AlwaysThrow> v;
+    bool caught = false;
+    try
+      {
+	AlwaysThrow a;
+	v = a;
+      }
+    catch (nullptr_t)
+      {
+	caught = true;
+      }
+    VERIFY(caught);
+    VERIFY(v.valueless_by_exception());
+  }
+  {
+    variant<int, AlwaysThrow> v;
+    bool caught = false;
+    try
+      {
+	v = AlwaysThrow{};
+      }
+    catch (nullptr_t)
+      {
+	caught = true;
+      }
+    VERIFY(caught);
+    VERIFY(v.valueless_by_exception());
+  }
+}
+
 int main()
 {
   default_ctor();
@@ -306,6 +483,7 @@ int main()
   arbitrary_ctor();
   in_place_index_ctor();
   in_place_type_ctor();
+  uses_allocator_ctor();
   copy_assign();
   move_assign();
   arbitrary_assign();
@@ -315,4 +493,6 @@ int main()
   test_relational();
   test_swap();
   test_visit();
+  test_hash();
+  test_valueless_by_exception();
 }

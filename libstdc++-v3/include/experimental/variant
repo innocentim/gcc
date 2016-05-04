@@ -289,10 +289,6 @@ namespace __variant
 	      { &__erased_dtor<__storage<_Types>&>... };
 	    _S_vtable[__this->_M_index](_M_storage());
 	  }
-	else
-	  {
-	    __this->_M_index = variant_npos;
-	  }
       }
 
       void*
@@ -366,7 +362,7 @@ namespace __variant
       template<typename _Alloc, size_t _Np, typename... _Args>
 	constexpr explicit
 	_Variant_base(const _Alloc& __a, in_place_index_t<_Np>, _Args&&... __args)
-	: _Storage(), _M_index(variant_npos)
+	: _Storage(), _M_index(_Np)
 	{
 	  using _Storage = __storage<variant_alternative_t<_Np, variant<_Types...>>>;
 	  __uses_allocator_construct(__a, static_cast<_Storage*>(_M_storage()), forward<_Args>(__args)...);
@@ -387,10 +383,17 @@ namespace __variant
 	  }
 	else
 	  {
-	    // Could be faster by using a 2-d vtable.
 	    _Variant_base __tmp(__rhs);
 	    this->~_Variant_base();
-	    new (this) _Variant_base(std::move(__tmp));
+	    __try
+	      {
+		new (this) _Variant_base(std::move(__tmp));
+	      }
+	    __catch (...)
+	      {
+		_M_index = variant_npos;
+		__throw_exception_again;
+	      }
 	  }
 	__glibcxx_assert(_M_index == __rhs._M_index);
 	return *this;
@@ -410,9 +413,16 @@ namespace __variant
 	  }
 	else
 	  {
-	    // Could be faster by using a 2-d vtable.
 	    this->~_Variant_base();
-	    new (this) _Variant_base(std::move(__rhs));
+	    __try
+	      {
+		new (this) _Variant_base(std::move(__rhs));
+	      }
+	    __catch (...)
+	      {
+		_M_index = variant_npos;
+		__throw_exception_again;
+	      }
 	  }
 	return *this;
       }
@@ -667,18 +677,20 @@ namespace __variant
     bool operator==(const variant<_Types...>& __lhs,
 		    const variant<_Types...>& __rhs)
     {
-      if (__lhs.index() == __rhs.index() && !__lhs.valueless_by_exception())
-	{
-	  using __detail::__variant::__storage;
-	  static constexpr bool (*_S_vtable[])(void*, void*) =
-	    { &__detail::__variant::__erased_equal_to<
-		const __storage<_Types>&, const __storage<_Types>&>... };
-	  return _S_vtable[__lhs.index()](
-	      __detail::__variant::__get_storage(__lhs),
-	      __detail::__variant::__get_storage(__rhs));
-	}
-      return false;
-    }
+      if (__lhs.index() != __rhs.index())
+	return false;
+
+      if (__lhs.valueless_by_exception())
+	return true;
+
+      using __detail::__variant::__storage;
+      static constexpr bool (*_S_vtable[])(void*, void*) =
+	{ &__detail::__variant::__erased_equal_to<
+	  const __storage<_Types>&, const __storage<_Types>&>... };
+      return _S_vtable[__lhs.index()](
+	  __detail::__variant::__get_storage(__lhs),
+	  __detail::__variant::__get_storage(__rhs));
+}
 
   template<typename... _Types>
     bool operator!=(const variant<_Types...>& __lhs,
@@ -692,18 +704,20 @@ namespace __variant
       if (__lhs.index() < __rhs.index())
 	return true;
 
-      if (__lhs.index() == __rhs.index() && !__lhs.valueless_by_exception())
-	{
-	  using __detail::__variant::__storage;
-	  static constexpr bool (*_S_vtable[])(void*, void*) =
-	    { &__detail::__variant::__erased_less_than<
-		const __storage<_Types>&,
-		const __storage<_Types>&>... };
-	  return _S_vtable[__lhs.index()](
-	      __detail::__variant::__get_storage(__lhs),
-	      __detail::__variant::__get_storage(__rhs));
-	}
-      return false;
+      if (__lhs.index() > __rhs.index())
+	return false;
+
+      if (__lhs.valueless_by_exception())
+	return false;
+
+      using __detail::__variant::__storage;
+      static constexpr bool (*_S_vtable[])(void*, void*) =
+	{ &__detail::__variant::__erased_less_than<
+	    const __storage<_Types>&,
+	    const __storage<_Types>&>... };
+      return _S_vtable[__lhs.index()](
+	  __detail::__variant::__get_storage(__lhs),
+	  __detail::__variant::__get_storage(__rhs));
     }
 
   template<typename... _Types>
@@ -930,7 +944,15 @@ namespace __variant
 	{
 	  static_assert(_Np < sizeof...(_Types), "_Np should be in [0, number of alternatives)");
 	  this->~variant();
-	  new (this) variant(in_place_index<_Np>, forward<_Args>(__args)...);
+	  __try
+	    {
+	      new (this) variant(in_place_index<_Np>, forward<_Args>(__args)...);
+	    }
+	  __catch (...)
+	    {
+	      this->_M_index = variant_npos;
+	      __throw_exception_again;
+	    }
 	  __glibcxx_assert(index() == _Np);
 	}
 
@@ -939,7 +961,15 @@ namespace __variant
 	{
 	  static_assert(_Np < sizeof...(_Types), "_Np should be in [0, number of alternatives)");
 	  this->~variant();
-	  new (this) variant(in_place_index<_Np>, __il, forward<_Args>(__args)...);
+	  __try
+	    {
+	      new (this) variant(in_place_index<_Np>, __il, forward<_Args>(__args)...);
+	    }
+	  __catch (...)
+	    {
+	      this->_M_index = variant_npos;
+	      __throw_exception_again;
+	    }
 	  __glibcxx_assert(index() == _Np);
 	}
 
@@ -1078,7 +1108,6 @@ _GLIBCXX_END_NAMESPACE_VERSION
 	return static_cast<size_t>(__magic_monostate_hash);
       }
     };
-
 
 } // namespace std
 
