@@ -370,7 +370,7 @@ namespace __variant
 	{
 	  using _Storage = __storage<variant_alternative_t<_Np, variant<_Types...>>>;
 	  __uses_allocator_construct(__a, static_cast<_Storage*>(_M_storage()), forward<_Args>(__args)...);
-	  __glibcxx_assert(index() == _Np);
+	  __glibcxx_assert(_M_index == _Np);
 	}
 
       _Variant_base&

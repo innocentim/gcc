@@ -674,6 +674,7 @@ experimental_headers = \
 	${experimental_srcdir}/unordered_map \
 	${experimental_srcdir}/unordered_set \
 	${experimental_srcdir}/utility \
+	${experimental_srcdir}/variant \
 	${experimental_srcdir}/vector \
 	${experimental_filesystem_headers}
 
